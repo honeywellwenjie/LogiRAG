@@ -1591,6 +1591,7 @@ def demo_page():
                 </div>
                 <div class="nav-links">
                     <a href="/upload">📤 Upload</a>
+                    <a href="/crawl">🕷️ Crawl</a>
                     <a href="/fstats">📊 Stats</a>
                 </div>
             </div>
@@ -1919,6 +1920,792 @@ Knowledge Base Content:
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/crawl', methods=['GET'])
+def crawl_page():
+    """Web crawler page with debug panel"""
+    # Get LLM configuration info
+    rag_llm_info = {'provider': 'unknown', 'model': 'unknown', 'api_base': 'unknown'}
+    try:
+        config = IndexerConfig.from_file()
+        rag_llm_info = {
+            'provider': config.rag_llm.provider,
+            'model': config.rag_llm.model,
+            'api_base': config.rag_llm.api_base
+        }
+    except:
+        pass
+    
+    html = f'''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Crawler - Knowledge Base</title>
+    <style>
+        :root {{
+            --primary: #ff6b6b;
+            --primary-dark: #ee5a5a;
+            --bg-dark: #1a1a2e;
+            --bg-darker: #16213e;
+            --text-light: #e0e0e0;
+            --text-muted: #888;
+            --success: #2ed573;
+            --warning: #ffd700;
+            --info: #87ceeb;
+            --error: #ff4757;
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-darker);
+            min-height: 100vh;
+            color: var(--text-light);
+        }}
+        .page-container {{
+            display: flex;
+            height: 100vh;
+        }}
+        /* Left Debug Panel */
+        .debug-panel {{
+            width: 420px;
+            background: var(--bg-dark);
+            border-right: 1px solid #2d2d44;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }}
+        .debug-header {{
+            padding: 1rem 1.25rem;
+            background: linear-gradient(135deg, var(--bg-darker) 0%, var(--bg-dark) 100%);
+            border-bottom: 1px solid #2d2d44;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }}
+        .status-dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--primary);
+            animation: pulse 2s infinite;
+        }}
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.5; }}
+        }}
+        .debug-header h3 {{
+            color: var(--primary);
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: 'Fira Code', monospace;
+        }}
+        .debug-content {{
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+        }}
+        .debug-section {{
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #2d2d44;
+        }}
+        .debug-label {{
+            color: #7b68ee;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: block;
+        }}
+        .debug-value {{ color: #b8b8b8; word-wrap: break-word; }}
+        .debug-value.success {{ color: var(--success); }}
+        .debug-value.warning {{ color: var(--warning); }}
+        .debug-value.info {{ color: var(--info); }}
+        .debug-value.error {{ color: var(--error); }}
+        .process-log {{
+            background: var(--bg-darker);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            max-height: 500px;
+            overflow-y: auto;
+        }}
+        .log-entry {{
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #2d2d44;
+        }}
+        .log-entry:last-child {{
+            border-bottom: none;
+        }}
+        .log-time {{
+            color: var(--text-muted);
+            font-size: 0.7rem;
+        }}
+        .log-msg {{
+            color: var(--text-light);
+        }}
+        .log-msg.success {{ color: var(--success); }}
+        .log-msg.error {{ color: var(--error); }}
+        .log-msg.info {{ color: var(--info); }}
+        .log-msg.warning {{ color: var(--warning); }}
+        /* Right Crawl Area */
+        .crawl-area-container {{
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .container {{
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 550px;
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+        }}
+        h1 {{
+            color: #fff;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.8rem;
+        }}
+        .subtitle {{
+            color: rgba(255, 255, 255, 0.6);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 0.9rem;
+        }}
+        .url-input-area {{
+            margin-bottom: 20px;
+        }}
+        .url-input {{
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }}
+        .url-input:focus {{
+            outline: none;
+            border-color: var(--primary);
+            background: rgba(255, 107, 107, 0.1);
+        }}
+        .url-input::placeholder {{
+            color: rgba(255, 255, 255, 0.4);
+        }}
+        .options {{
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }}
+        .option {{
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+        }}
+        .option input[type="checkbox"] {{
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }}
+        .number-inputs {{
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }}
+        .number-input-group {{
+            flex: 1;
+        }}
+        .number-input-group label {{
+            display: block;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.85rem;
+            margin-bottom: 6px;
+        }}
+        .number-input {{
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+        }}
+        .number-input:focus {{
+            outline: none;
+            border-color: var(--primary);
+            background: rgba(255, 107, 107, 0.1);
+        }}
+        .input-hint {{
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 4px;
+        }}
+        button {{
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a5a 100%);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }}
+        button:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+        }}
+        button:disabled {{
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }}
+        .status {{
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }}
+        .status.success {{
+            display: block;
+            background: rgba(46, 213, 115, 0.2);
+            border: 1px solid rgba(46, 213, 115, 0.5);
+            color: #2ed573;
+        }}
+        .status.error {{
+            display: block;
+            background: rgba(255, 71, 87, 0.2);
+            border: 1px solid rgba(255, 71, 87, 0.5);
+            color: #ff4757;
+        }}
+        .status.loading {{
+            display: block;
+            background: rgba(255, 107, 107, 0.2);
+            border: 1px solid rgba(255, 107, 107, 0.5);
+            color: var(--primary);
+        }}
+        .nav-links {{
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }}
+        .nav-link {{
+            color: var(--primary);
+            text-decoration: none;
+        }}
+        .nav-link:hover {{
+            text-decoration: underline;
+        }}
+        .markdown-preview {{
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.75rem;
+            color: #b8b8b8;
+            white-space: pre-wrap;
+            display: none;
+        }}
+        @media (max-width: 992px) {{
+            .page-container {{ flex-direction: column; }}
+            .debug-panel {{ width: 100%; height: 300px; border-right: none; border-bottom: 1px solid #2d2d44; }}
+        }}
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <!-- Left Debug Panel -->
+        <div class="debug-panel">
+            <div class="debug-header">
+                <div class="status-dot"></div>
+                <h3>🕷️ Crawl Debug Log</h3>
+            </div>
+            <div class="debug-content" id="debugLog">
+                <div class="debug-section">
+                    <span class="debug-label">[LLM Configuration]</span>
+                    <div class="debug-value">
+                        <div>Provider: <span class="warning">{rag_llm_info['provider']}</span></div>
+                        <div>Model: <span class="success">{rag_llm_info['model']}</span></div>
+                        <div>API Base: <span class="info">{rag_llm_info['api_base']}</span></div>
+                    </div>
+                </div>
+                <div class="debug-section">
+                    <span class="debug-label">[Status]</span>
+                    <span class="debug-value info" id="statusText">Ready - Enter a URL to crawl...</span>
+                </div>
+                <div class="debug-section" id="processSection" style="display:none;">
+                    <span class="debug-label">[Processing Log]</span>
+                    <div class="process-log" id="processLog"></div>
+                </div>
+                <div class="debug-section" id="resultSection" style="display:none;">
+                    <span class="debug-label">[Crawl Result]</span>
+                    <div class="debug-value" id="crawlResult"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Crawl Area -->
+        <div class="crawl-area-container">
+            <div class="container">
+                <h1>🕷️ Web Crawler</h1>
+                <p class="subtitle">Crawl web pages and add to knowledge base</p>
+                
+                <form id="crawlForm">
+                    <div class="url-input-area">
+                        <input type="url" 
+                               id="urlInput" 
+                               class="url-input" 
+                               placeholder="https://example.com/page" 
+                               required>
+                    </div>
+                    
+                    <div class="number-inputs">
+                        <div class="number-input-group">
+                            <label for="crawlDepth">Crawl Depth</label>
+                            <input type="number" id="crawlDepth" class="number-input" value="0" min="0" max="10">
+                            <div class="input-hint">0 = current page only, 1 = follow links once, ...</div>
+                        </div>
+                        <div class="number-input-group">
+                            <label for="maxPages">Max Pages</label>
+                            <input type="number" id="maxPages" class="number-input" value="10" min="1" max="100">
+                            <div class="input-hint">Maximum number of pages to crawl</div>
+                        </div>
+                    </div>
+                    
+                    <div class="options">
+                        <label class="option">
+                            <input type="checkbox" id="useLlm" checked>
+                            Use LLM for summaries
+                        </label>
+                        <label class="option">
+                            <input type="checkbox" id="useLlmConvert" checked>
+                            Use LLM for HTML conversion
+                        </label>
+                        <label class="option">
+                            <input type="checkbox" id="includeContent" checked>
+                            Include content
+                        </label>
+                    </div>
+                    
+                    <button type="submit" id="submitBtn">🔍 Crawl & Index</button>
+                </form>
+                
+                <div class="status" id="status"></div>
+                <div class="markdown-preview" id="markdownPreview"></div>
+                
+                <div class="nav-links">
+                    <a href="/upload" class="nav-link">📤 Upload Files</a>
+                    <a href="/demo" class="nav-link">💬 Chat Demo</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('crawlForm');
+        const urlInput = document.getElementById('urlInput');
+        const status = document.getElementById('status');
+        const submitBtn = document.getElementById('submitBtn');
+        const processSection = document.getElementById('processSection');
+        const processLog = document.getElementById('processLog');
+        const resultSection = document.getElementById('resultSection');
+        const crawlResult = document.getElementById('crawlResult');
+        const statusText = document.getElementById('statusText');
+        const markdownPreview = document.getElementById('markdownPreview');
+
+        function addLog(msg, type = '') {{
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-time">${{time}}</span> <span class="log-msg ${{type}}">${{msg}}</span>`;
+            processLog.appendChild(entry);
+            processLog.scrollTop = processLog.scrollHeight;
+        }}
+
+        function clearLogs() {{
+            processLog.innerHTML = '';
+            resultSection.style.display = 'none';
+            markdownPreview.style.display = 'none';
+        }}
+
+        urlInput.addEventListener('input', () => {{
+            if (urlInput.value) {{
+                statusText.textContent = 'URL entered: ' + urlInput.value;
+                statusText.className = 'debug-value info';
+            }} else {{
+                statusText.textContent = 'Ready - Enter a URL to crawl...';
+            }}
+        }});
+
+        form.addEventListener('submit', async (e) => {{
+            e.preventDefault();
+            
+            const url = urlInput.value.trim();
+            if (!url) {{
+                status.className = 'status error';
+                status.textContent = 'Please enter a URL';
+                addLog('Error: No URL provided', 'error');
+                return;
+            }}
+            
+            submitBtn.disabled = true;
+            status.className = 'status loading';
+            status.textContent = '🕷️ Crawling and indexing...';
+            processSection.style.display = 'block';
+            resultSection.style.display = 'none';
+            markdownPreview.style.display = 'none';
+            clearLogs();
+            
+            const useLlm = document.getElementById('useLlm').checked;
+            const useLlmConvert = document.getElementById('useLlmConvert').checked;
+            const includeContent = document.getElementById('includeContent').checked;
+            const crawlDepth = parseInt(document.getElementById('crawlDepth').value) || 0;
+            const maxPages = parseInt(document.getElementById('maxPages').value) || 10;
+            
+            addLog('Starting crawl: ' + url, 'info');
+            addLog('Depth: ' + crawlDepth + ', Max pages: ' + maxPages, 'info');
+            addLog('Options: use_llm=' + useLlm + ', use_llm_convert=' + useLlmConvert, 'info');
+            statusText.textContent = 'Crawling: ' + url;
+            statusText.className = 'debug-value warning';
+            
+            try {{
+                addLog('Fetching web page(s)...', 'info');
+                const startTime = Date.now();
+                
+                const response = await fetch('/crawl', {{
+                    method: 'POST',
+                    headers: {{
+                        'Content-Type': 'application/json'
+                    }},
+                    body: JSON.stringify({{
+                        url: url,
+                        depth: crawlDepth,
+                        max_pages: maxPages,
+                        use_llm: useLlm,
+                        use_llm_convert: useLlmConvert,
+                        include_content: includeContent
+                    }})
+                }});
+                
+                const result = await response.json();
+                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+                
+                // Process logs from server
+                if (result.logs && Array.isArray(result.logs)) {{
+                    result.logs.forEach(log => {{
+                        addLog(log.message, log.type || '');
+                    }});
+                }}
+                
+                if (response.ok) {{
+                    const pagesCount = result.pages_crawled || 1;
+                    addLog('Crawl completed in ' + duration + 's', 'success');
+                    addLog('Pages crawled: ' + pagesCount, 'success');
+                    addLog('Total nodes: ' + result.nodes, 'success');
+                    addLog('Summary nodes: ' + result.nodes_with_summary, 'success');
+                    if (result.replaced_docs && result.replaced_docs.length > 0) {{
+                        addLog('Replaced existing: ' + result.replaced_docs.join(', '), 'warning');
+                    }}
+                    
+                    status.className = 'status success';
+                    status.innerHTML = '✅ Crawl successful!<br>Pages: ' + pagesCount + '<br>Nodes: ' + result.nodes + '<br>Summary nodes: ' + result.nodes_with_summary;
+                    statusText.textContent = 'Completed: ' + pagesCount + ' page(s)';
+                    statusText.className = 'debug-value success';
+                    
+                    // Show result section
+                    resultSection.style.display = 'block';
+                    const llmInfo = result.llm_info || {{}};
+                    crawlResult.innerHTML = `
+                        <div>URL: <span class="info">${{result.url}}</span></div>
+                        <div>Domain: <span class="warning">${{result.domain || 'N/A'}}</span></div>
+                        <div>Pages Crawled: <span class="success">${{pagesCount}}</span></div>
+                        <div>Total Nodes: <span class="warning">${{result.nodes}}</span></div>
+                        <div>Summary Nodes: <span class="info">${{result.nodes_with_summary}}</span></div>
+                        <div>Processing Time: <span class="info">${{duration}}s</span></div>
+                        ${{result.replaced_docs && result.replaced_docs.length > 0 ? 
+                            '<div>Replaced: <span class="warning">' + result.replaced_docs.length + ' doc(s)</span></div>' : ''}}
+                        <div style="margin-top:10px; padding-top:10px; border-top:1px solid #2d2d44;">
+                            <div>LLM Provider: <span class="warning">${{llmInfo.provider || 'N/A'}}</span></div>
+                            <div>LLM Model: <span class="success">${{llmInfo.model || 'N/A'}}</span></div>
+                        </div>
+                    `;
+                    
+                    // Show markdown preview if available
+                    if (result.markdown_preview) {{
+                        markdownPreview.style.display = 'block';
+                        markdownPreview.textContent = result.markdown_preview;
+                    }}
+                    
+                    urlInput.value = '';
+                }} else {{
+                    addLog('Error: ' + (result.error || 'Crawl failed'), 'error');
+                    status.className = 'status error';
+                    status.textContent = '❌ ' + (result.error || 'Crawl failed');
+                    statusText.textContent = 'Error crawling URL';
+                    statusText.className = 'debug-value error';
+                }}
+            }} catch (err) {{
+                addLog('Network error: ' + err.message, 'error');
+                status.className = 'status error';
+                status.textContent = '❌ Network error: ' + err.message;
+                statusText.textContent = 'Network error';
+                statusText.className = 'debug-value error';
+            }} finally {{
+                submitBtn.disabled = false;
+            }}
+        }});
+    </script>
+</body>
+</html>
+'''
+    return html
+
+
+@app.route('/crawl', methods=['POST'])
+def crawl_url():
+    """Handle URL crawl and indexing with multi-level support"""
+    global document_indexes, node_maps
+    logs = []
+    
+    def add_log(message, log_type=''):
+        logs.append({'message': message, 'type': log_type})
+        logger.info(f"[Crawl] {message}")
+    
+    def generate_doc_name(page_url: str) -> str:
+        """Generate document name from URL"""
+        from urllib.parse import urlparse
+        parsed = urlparse(page_url)
+        doc_name = parsed.netloc.replace('.', '_') + parsed.path.replace('/', '_')
+        doc_name = doc_name.strip('_')[:100]  # Limit length
+        if not doc_name:
+            doc_name = 'web_page'
+        return doc_name
+    
+    def remove_existing_doc(doc_name: str) -> bool:
+        """Remove existing document from memory and disk"""
+        removed = False
+        
+        # Remove from memory
+        if doc_name in document_indexes:
+            del document_indexes[doc_name]
+            removed = True
+        if doc_name in node_maps:
+            del node_maps[doc_name]
+        
+        # Remove from disk
+        md_path = os.path.join(RESULTS_DIR, f"{doc_name}.md")
+        index_path = os.path.join(RESULTS_DIR, f"{doc_name}_index.json")
+        
+        if os.path.exists(md_path):
+            os.remove(md_path)
+            removed = True
+        if os.path.exists(index_path):
+            os.remove(index_path)
+        
+        return removed
+    
+    try:
+        data = request.get_json()
+        if not data or 'url' not in data:
+            return jsonify({'error': 'No URL provided'}), 400
+        
+        url = data['url'].strip()
+        if not url:
+            return jsonify({'error': 'Empty URL'}), 400
+        
+        # Get crawl parameters
+        depth = data.get('depth', 0)
+        max_pages = data.get('max_pages', 10)
+        use_llm = data.get('use_llm', True)
+        use_llm_convert = data.get('use_llm_convert', True)
+        include_content = data.get('include_content', True)
+        
+        add_log(f"Received URL: {url}", 'info')
+        add_log(f"Crawl depth: {depth}, Max pages: {max_pages}", 'info')
+        
+        # Import web components
+        from knowledge_indexer.web.web_indexer import WebIndexer
+        from knowledge_indexer.web.crawler import WebCrawler
+        from knowledge_indexer.web.html_to_markdown import HTMLToMarkdown, SimpleHTMLToMarkdown
+        from urllib.parse import urlparse
+        
+        # Get LLM instance
+        llm_instance = get_llm() if use_llm else None
+        llm_info = {'provider': 'N/A', 'model': 'N/A', 'api_base': 'N/A'}
+        
+        if use_llm and llm_instance:
+            try:
+                config = IndexerConfig.from_file()
+                llm_info = {
+                    'provider': config.rag_llm.provider,
+                    'model': config.rag_llm.model,
+                    'api_base': config.rag_llm.api_base
+                }
+                add_log(f"Using LLM: {llm_info['provider']}/{llm_info['model']}", 'info')
+            except:
+                pass
+        else:
+            add_log("LLM disabled for this crawl", 'warning')
+        
+        # Create crawler
+        add_log("Initializing crawler...", 'info')
+        crawler = WebCrawler(
+            max_pages=max_pages,
+            same_domain_only=True,
+            max_workers=3,
+        )
+        
+        # Create converter
+        if use_llm_convert and llm_instance:
+            converter = HTMLToMarkdown(llm_instance)
+        else:
+            converter = SimpleHTMLToMarkdown()
+        
+        # Create tree builder for indexing
+        from knowledge_indexer.indexer.tree_builder import TreeBuilder
+        tree_builder = TreeBuilder(
+            llm=llm_instance,
+            add_node_id=True,
+            add_node_summary=use_llm and llm_instance is not None,
+            add_doc_description=use_llm and llm_instance is not None,
+        )
+        
+        # Crawl pages
+        add_log(f"Starting crawl (depth={depth})...", 'info')
+        
+        try:
+            crawl_result = crawler.crawl_and_convert(
+                start_url=url,
+                level=depth,
+                converter=converter,
+            )
+            add_log(f"Crawled {crawl_result.success_count} page(s), {crawl_result.failed_count} failed", 'success')
+        except Exception as e:
+            add_log(f"Crawl error: {str(e)}", 'error')
+            return jsonify({
+                'error': f'Crawl failed: {str(e)}',
+                'logs': logs
+            }), 500
+        
+        if not crawl_result.pages:
+            add_log("No pages crawled successfully", 'error')
+            return jsonify({
+                'error': 'No pages could be crawled',
+                'logs': logs
+            }), 400
+        
+        # Process each page
+        parsed = urlparse(url)
+        total_nodes = 0
+        total_summary = 0
+        replaced_docs = []
+        first_markdown = ""
+        
+        for i, page in enumerate(crawl_result.pages):
+            doc_name = generate_doc_name(page.url)
+            add_log(f"[{i+1}/{len(crawl_result.pages)}] Processing: {doc_name}", 'info')
+            
+            # Check and remove existing document
+            if remove_existing_doc(doc_name):
+                add_log(f"  Replaced existing: {doc_name}", 'warning')
+                replaced_docs.append(doc_name)
+            
+            # Get markdown content
+            markdown_content = page.markdown if page.markdown else ""
+            if not markdown_content and page.html:
+                try:
+                    markdown_content = converter.convert(page.html, page.title, page.url)
+                except:
+                    markdown_content = ""
+            
+            if not markdown_content:
+                add_log(f"  Skipped (no content): {doc_name}", 'warning')
+                continue
+            
+            # Save first markdown for preview
+            if not first_markdown:
+                first_markdown = markdown_content
+            
+            # Build index
+            try:
+                index = tree_builder.build_from_content(markdown_content)
+                index.source_file = page.url
+                index.metadata.update({
+                    "type": "web",
+                    "url": page.url,
+                    "domain": page.domain,
+                })
+            except Exception as e:
+                add_log(f"  Index error: {str(e)}", 'error')
+                continue
+            
+            # Save markdown
+            md_path = os.path.join(RESULTS_DIR, f"{doc_name}.md")
+            with open(md_path, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            
+            # Save index
+            index_path = os.path.join(RESULTS_DIR, f"{doc_name}_index.json")
+            with open(index_path, 'w', encoding='utf-8') as f:
+                f.write(index.to_json(include_content=include_content))
+            
+            # Update in-memory indexes
+            document_indexes[doc_name] = index
+            node_maps[doc_name] = create_node_mapping(index)
+            
+            nodes = len(index.get_all_nodes())
+            summaries = sum(1 for n in index.get_all_nodes() if n.summary)
+            total_nodes += nodes
+            total_summary += summaries
+            
+            add_log(f"  Indexed: {nodes} nodes, {summaries} with summary", 'success')
+        
+        add_log(f"All pages processed: {total_nodes} total nodes", 'success')
+        
+        # Markdown preview (first 500 chars of first page)
+        markdown_preview = first_markdown[:500] + "..." if len(first_markdown) > 500 else first_markdown
+        
+        return jsonify({
+            'status': 'ok',
+            'url': url,
+            'domain': parsed.netloc,
+            'pages_crawled': len(crawl_result.pages),
+            'pages_failed': crawl_result.failed_count,
+            'nodes': total_nodes,
+            'nodes_with_summary': total_summary,
+            'replaced_docs': replaced_docs,
+            'llm_info': llm_info,
+            'markdown_preview': markdown_preview,
+            'logs': logs
+        })
+        
+    except Exception as e:
+        add_log(f"Unexpected error: {str(e)}", 'error')
+        logger.error(f"Crawl error: {e}", exc_info=True)
+        return jsonify({
+            'error': str(e),
+            'logs': logs
+        }), 500
 
 
 if __name__ == '__main__':
