@@ -55,10 +55,13 @@ web:
 
 # --- Local Ollama (DeepSeek-R1) ---
 # Note: Local models work for indexing but may have limited RAG retrieval accuracy
+# IMPORTANT: Docker uses network_mode: "host" on Linux, so localhost works.
+#            On Mac/Windows Docker Desktop, you may need to use host.docker.internal instead.
 # rag_llm:
 #   provider: ollama
 #   api_key: "not-needed"
-#   api_base: "http://localhost:11434/v1"
+#   api_base: "http://localhost:11434/v1"  # Use localhost with network_mode: host (Linux)
+#   # api_base: "http://host.docker.internal:11434/v1"  # Use this for Mac/Windows Docker Desktop
 #   model: "deepseek-r1:32b"
 #   temperature: 0.1
 #   max_tokens: 4096
