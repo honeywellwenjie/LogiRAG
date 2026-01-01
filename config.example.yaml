@@ -1,8 +1,10 @@
 # LogiRAG Configuration Example
 # Copy this file to config.yaml and fill in your settings
 
-# LLM Configuration
-llm:
+# ===========================================
+# RAG LLM Configuration (for RAG search & indexing)
+# ===========================================
+rag_llm:
   # Provider: openai, ollama, or any OpenAI-compatible API
   provider: openai
   
@@ -12,11 +14,25 @@ llm:
   # API endpoint (change for local models or custom endpoints)
   api_base: "https://api.openai.com/v1"
   
-  # Model name
+  # Model name - used for RAG search reasoning and index generation
   model: "gpt-4o"
   
   # Optional parameters
   temperature: 0.1
+  max_tokens: 4096
+  timeout: 60
+
+# ===========================================
+# Chat LLM Configuration (for chat responses)
+# ===========================================
+# Optional: If not specified, falls back to 'rag_llm' config above
+# You can use a different (possibly stronger) model for chat responses
+chat_llm:
+  provider: openai
+  api_key: "your-api-key-here"
+  api_base: "https://api.openai.com/v1"
+  model: "gpt-4o"
+  temperature: 0.7
   max_tokens: 4096
   timeout: 60
 
@@ -37,37 +53,56 @@ web:
 # Example Configurations for Different LLMs
 # ===========================================
 
+# --- Local Ollama (DeepSeek-R1) ---
+# Note: Local models work for indexing but may have limited RAG retrieval accuracy
+# rag_llm:
+#   provider: ollama
+#   api_key: "not-needed"
+#   api_base: "http://localhost:11434/v1"
+#   model: "deepseek-r1:32b"
+#   temperature: 0.1
+#   max_tokens: 4096
+#   timeout: 600  # 10 minutes for slow local models
+#
+# chat_llm:
+#   provider: ollama
+#   api_key: "not-needed"
+#   api_base: "http://localhost:11434/v1"
+#   model: "deepseek-r1:32b"
+#   temperature: 0.7
+#   max_tokens: 4096
+#   timeout: 600
+
 # --- OpenAI ---
-# llm:
+# rag_llm:
 #   provider: openai
 #   api_key: "sk-xxx"
 #   api_base: "https://api.openai.com/v1"
 #   model: "gpt-4o"
 
 # --- Ollama (Local) ---
-# llm:
+# rag_llm:
 #   provider: ollama
 #   api_base: "http://localhost:11434/v1"
 #   model: "llama3"
 
-# --- DeepSeek ---
-# llm:
+# --- DeepSeek API ---
+# rag_llm:
 #   provider: openai
 #   api_key: "sk-xxx"
 #   api_base: "https://api.deepseek.com/v1"
 #   model: "deepseek-chat"
 
 # --- Azure OpenAI ---
-# llm:
+# rag_llm:
 #   provider: openai
 #   api_key: "your-azure-key"
 #   api_base: "https://your-resource.openai.azure.com/"
 #   model: "gpt-4"
 
 # --- vLLM / LocalAI / LM Studio ---
-# llm:
+# rag_llm:
 #   provider: openai
 #   api_key: "not-needed"
 #   api_base: "http://localhost:8000/v1"
 #   model: "your-local-model"
-

@@ -58,20 +58,41 @@ document_indexes: dict = {}
 node_maps: dict = {}
 search_engine: TreeSearchEngine = None
 simple_search: SimpleTreeSearch = None
+chat_llm: BaseLLM = None  # Separate LLM for chat responses
 
 
 def get_llm() -> BaseLLM:
-    """Get or create LLM instance"""
+    """Get or create LLM instance for RAG search and indexing"""
     global llm
     if llm is None:
         try:
             config = IndexerConfig.from_file()
-            llm = LLMFactory.from_config(config.llm)
-            logger.info(f"LLM initialized: {config.llm.provider}/{config.llm.model}")
+            llm = LLMFactory.from_config(config.rag_llm)
+            logger.info(f"RAG LLM initialized: {config.rag_llm.provider}/{config.rag_llm.model}")
         except Exception as e:
             logger.error(f"Failed to initialize LLM: {e}")
             raise
     return llm
+
+
+def get_chat_llm() -> BaseLLM:
+    """Get or create LLM instance for chat responses (can be different from RAG LLM)"""
+    global chat_llm
+    if chat_llm is None:
+        try:
+            config = IndexerConfig.from_file()
+            # Check if chat_llm is configured separately
+            if hasattr(config, 'chat_llm') and config.chat_llm:
+                chat_llm = LLMFactory.from_config(config.chat_llm)
+                logger.info(f"Chat LLM initialized: {config.chat_llm.provider}/{config.chat_llm.model}")
+            else:
+                # Fall back to main LLM
+                chat_llm = get_llm()
+                logger.info("Chat LLM: using main LLM config")
+        except Exception as e:
+            logger.error(f"Failed to initialize Chat LLM: {e}, falling back to main LLM")
+            chat_llm = get_llm()
+    return chat_llm
 
 
 def get_search_engine() -> TreeSearchEngine:
@@ -634,9 +655,9 @@ def upload_page():
     try:
         config = IndexerConfig.from_file()
         llm_info = {
-            'provider': config.llm.provider,
-            'model': config.llm.model,
-            'api_base': config.llm.api_base
+            'provider': config.rag_llm.provider,
+            'model': config.rag_llm.model,
+            'api_base': config.rag_llm.api_base
         }
     except:
         pass
@@ -1193,9 +1214,9 @@ def upload_file():
             try:
                 config = IndexerConfig.from_file()
                 llm_info = {
-                    'provider': config.llm.provider,
-                    'model': config.llm.model,
-                    'api_base': config.llm.api_base
+                    'provider': config.rag_llm.provider,
+                    'model': config.rag_llm.model,
+                    'api_base': config.rag_llm.api_base
                 }
             except:
                 pass
@@ -1678,18 +1699,30 @@ def demo_page():
             const savedTokens = kbTokens - ctxTokens;
             const savedPercent = kbChars > 0 ? ((savedChars / kbChars) * 100).toFixed(1) : '0.0';
             
-            const llmInfo = debug.llm_info || {};
+            const ragLlmInfo = debug.rag_llm_info || debug.llm_info || {};
+            const chatLlmInfo = debug.chat_llm_info || debug.llm_info || {};
+            const isSameLlm = ragLlmInfo.model === chatLlmInfo.model && ragLlmInfo.api_base === chatLlmInfo.api_base;
             ragLog.innerHTML = `
                 <div class="rag-section">
                     <span class="rag-label">[Timestamp]</span>
                     <span class="rag-value info">${new Date().toLocaleString()}</span>
                 </div>
                 <div class="rag-section">
-                    <span class="rag-label">[LLM Model]</span>
+                    <span class="rag-label">[RAG LLM]</span>
                     <div class="rag-value">
-                        <div>Provider: <span class="warning">${llmInfo.provider || 'unknown'}</span></div>
-                        <div>Model: <span class="success">${llmInfo.model || 'unknown'}</span></div>
-                        <div>API Base: <span class="info">${llmInfo.api_base || 'unknown'}</span></div>
+                        <div>Provider: <span class="warning">${ragLlmInfo.provider || 'unknown'}</span></div>
+                        <div>Model: <span class="success">${ragLlmInfo.model || 'unknown'}</span></div>
+                        <div>API Base: <span class="info">${ragLlmInfo.api_base || 'unknown'}</span></div>
+                    </div>
+                </div>
+                <div class="rag-section">
+                    <span class="rag-label">[Chat LLM]</span>
+                    <div class="rag-value">
+                        ${isSameLlm ? '<div><span class="info">(Same as RAG LLM)</span></div>' : `
+                        <div>Provider: <span class="warning">${chatLlmInfo.provider || 'unknown'}</span></div>
+                        <div>Model: <span class="success">${chatLlmInfo.model || 'unknown'}</span></div>
+                        <div>API Base: <span class="info">${chatLlmInfo.api_base || 'unknown'}</span></div>
+                        `}
                     </div>
                 </div>
                 <div class="rag-section">
@@ -1815,10 +1848,10 @@ Knowledge Base Content:
 - Current Year: {current_year}
 - Current Timestamp: {current_datetime}"""
 
-        # 4. Call LLM to generate response
+        # 4. Call Chat LLM to generate response (may be different from RAG LLM)
         try:
-            llm_instance = get_llm()
-            response = llm_instance.complete(
+            chat_llm_instance = get_chat_llm()
+            response = chat_llm_instance.complete(
                 prompt=user_message,
                 system_prompt=system_prompt,
                 temperature=0.7
@@ -1830,23 +1863,37 @@ Knowledge Base Content:
             reply = re.sub(r'<think>.*?</think>', '', reply, flags=re.DOTALL).strip()
 
         except Exception as e:
-            logger.error(f"LLM call failed: {e}")
+            logger.error(f"Chat LLM call failed: {e}")
             reply = f"Sorry, an error occurred while generating response: {str(e)}"
 
         # 5. Return result with enhanced debug info
-        # 获取 LLM 模型信息
-        llm_info = {
+        # 获取 LLM 模型信息 (分别显示 RAG LLM 和 Chat LLM)
+        rag_llm_info = {
+            'provider': 'unknown',
+            'model': 'unknown',
+            'api_base': 'unknown'
+        }
+        chat_llm_info = {
             'provider': 'unknown',
             'model': 'unknown',
             'api_base': 'unknown'
         }
         try:
             config = IndexerConfig.from_file()
-            llm_info = {
-                'provider': config.llm.provider,
-                'model': config.llm.model,
-                'api_base': config.llm.api_base
+            rag_llm_info = {
+                'provider': config.rag_llm.provider,
+                'model': config.rag_llm.model,
+                'api_base': config.rag_llm.api_base
             }
+            # Chat LLM info
+            if hasattr(config, 'chat_llm') and config.chat_llm:
+                chat_llm_info = {
+                    'provider': config.chat_llm.provider,
+                    'model': config.chat_llm.model,
+                    'api_base': config.chat_llm.api_base
+                }
+            else:
+                chat_llm_info = rag_llm_info  # Same as RAG LLM
         except:
             pass
         
@@ -1863,7 +1910,9 @@ Knowledge Base Content:
                     'tokens': kb_stats['estimated_tokens']
                 },
                 'llm_response': reply,
-                'llm_info': llm_info
+                'rag_llm_info': rag_llm_info,    # LLM used for RAG search
+                'chat_llm_info': chat_llm_info,  # LLM used for chat response
+                'llm_info': chat_llm_info        # Keep for backward compatibility
             }
         })
 
