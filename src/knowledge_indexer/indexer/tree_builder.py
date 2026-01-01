@@ -101,7 +101,7 @@ class TreeBuilder:
                 toc = index.get_toc(max_depth=3)
                 index.description = self.llm.generate_document_description(preview, toc)
             except Exception as e:
-                logger.warning(f"生成文档描述失败: {e}")
+                logger.warning(f"Failed to generate document description: {e}")
                 index.description = ""
         
         return index
@@ -142,7 +142,7 @@ class TreeBuilder:
                         context=section.title
                     )
                 except Exception as e:
-                    logger.warning(f"生成节点摘要失败 [{section.title}]: {e}")
+                    logger.warning(f"Failed to generate node summary [{section.title}]: {e}")
                     node.summary = ""
             
             nodes.append(node)
@@ -251,7 +251,7 @@ class TreeBuilder:
                         context=node.title
                     )
                 except Exception as e:
-                    logger.warning(f"生成节点摘要失败 [{node.title}]: {e}")
+                    logger.warning(f"Failed to generate node summary [{node.title}]: {e}")
         
         # 生成文档描述
         if not index.description:
@@ -264,7 +264,7 @@ class TreeBuilder:
                 toc = index.get_toc(max_depth=3)
                 index.description = llm.generate_document_description(preview, toc)
             except Exception as e:
-                logger.warning(f"生成文档描述失败: {e}")
+                logger.warning(f"Failed to generate document description: {e}")
         
         return index
 

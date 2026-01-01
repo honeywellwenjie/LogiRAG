@@ -1922,6 +1922,25 @@ Knowledge Base Content:
 
 
 if __name__ == '__main__':
+    # 1. Validate configuration file
+    try:
+        logger.info("Validating configuration...")
+        config = IndexerConfig.from_file()
+        logger.info(f"RAG LLM: {config.rag_llm.provider}/{config.rag_llm.model}")
+        if config.chat_llm:
+            logger.info(f"Chat LLM: {config.chat_llm.provider}/{config.chat_llm.model}")
+        else:
+            logger.info("Chat LLM: (same as RAG LLM)")
+    except ValueError as e:
+        # Configuration format error, show friendly message
+        print(str(e))
+        logger.error("Configuration validation failed. Please fix config.yaml")
+        exit(1)
+    except Exception as e:
+        logger.error(f"Configuration error: {str(e)}")
+        logger.warning("Server will start with default/env configuration")
+    
+    # 2. 加载索引
     try:
         load_all_indexes()
         logger.info("Indexes loaded successfully")
@@ -1938,6 +1957,7 @@ if __name__ == '__main__':
         logger.error(f"Failed to load indexes: {str(e)}")
         logger.warning("Server will start but queries may fail")
     
+    # 3. 启动服务
     port = int(os.getenv('RAG_SERVER_PORT', 3003))
     logger.info(f"Starting Enhanced RAG API server on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)

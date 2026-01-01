@@ -31,7 +31,7 @@ class LLMFactory:
     def register_provider(cls, name: str, provider_class: type):
         """注册新的 LLM 提供者"""
         cls._providers[name] = provider_class
-        logger.info(f"已注册 LLM 提供者: {name}")
+        logger.info(f"Registered LLM provider: {name}")
     
     @classmethod
     def create(
@@ -58,7 +58,7 @@ class LLMFactory:
         provider = provider.lower()
         
         if provider not in cls._providers:
-            logger.warning(f"未知的 LLM 提供者: {provider}，使用 OpenAI 兼容模式")
+            logger.warning(f"Unknown LLM provider: {provider}, using OpenAI compatible mode")
             provider = "custom"
         
         provider_class = cls._providers[provider]

@@ -44,11 +44,11 @@ class OpenAICompatibleLLM(BaseLLM):
             )
             self._available = True
         except ImportError:
-            logger.warning("openai 库未安装，请运行: pip install openai")
+            logger.warning("openai library not installed, run: pip install openai")
             self.client = None
             self._available = False
         except Exception as e:
-            logger.error(f"初始化 OpenAI 客户端失败: {e}")
+            logger.error(f"Failed to initialize OpenAI client: {e}")
             self.client = None
             self._available = False
     
@@ -61,7 +61,7 @@ class OpenAICompatibleLLM(BaseLLM):
     ) -> LLMResponse:
         """发送聊天请求"""
         if not self._available or self.client is None:
-            raise RuntimeError("OpenAI 客户端不可用")
+            raise RuntimeError("OpenAI client unavailable")
         
         # 转换消息格式
         formatted_messages = [msg.to_dict() for msg in messages]
@@ -90,7 +90,7 @@ class OpenAICompatibleLLM(BaseLLM):
                 raw_response=response
             )
         except Exception as e:
-            logger.error(f"LLM 请求失败: {e}")
+            logger.error(f"LLM request failed: {e}")
             raise
     
     def is_available(self) -> bool:
@@ -107,7 +107,7 @@ class OpenAICompatibleLLM(BaseLLM):
             )
             return True
         except Exception as e:
-            logger.warning(f"LLM 服务不可用: {e}")
+            logger.warning(f"LLM service unavailable: {e}")
             return False
 
 

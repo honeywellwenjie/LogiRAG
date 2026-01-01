@@ -132,7 +132,7 @@ def main():
     
     # 检查文件是否存在
     if not os.path.exists(args.md_path):
-        print(f"错误: 文件不存在: {args.md_path}", file=sys.stderr)
+        print(f"Error: File not found: {args.md_path}", file=sys.stderr)
         sys.exit(1)
     
     # 加载配置（从项目根目录查找配置文件）
@@ -148,12 +148,12 @@ def main():
     try:
         if config_file:
             config = IndexerConfig.from_file(config_file)
-            print(f"使用配置文件: {config_file}", file=sys.stderr)
+            print(f"Using config file: {config_file}", file=sys.stderr)
         else:
             config = IndexerConfig()
     except FileNotFoundError as e:
         if args.config:
-            print(f"错误: {e}", file=sys.stderr)
+            print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
         config = IndexerConfig()
     
@@ -171,15 +171,15 @@ def main():
     llm = None
     if not args.no_summary:
         if not config.llm.api_key and config.llm.provider != "ollama":
-            print("警告: 未提供 API 密钥，将不生成摘要", file=sys.stderr)
-            print("提示: 在 config.yaml 中配置 api_key 或使用 --api-key 参数", file=sys.stderr)
+            print("Warning: No API key provided, summaries will not be generated", file=sys.stderr)
+            print("Hint: Configure api_key in config.yaml or use --api-key parameter", file=sys.stderr)
         else:
             try:
                 llm = LLMFactory.from_config(config.llm)
-                print(f"使用 LLM: {config.llm.provider}/{config.llm.model}", file=sys.stderr)
+                print(f"Using LLM: {config.llm.provider}/{config.llm.model}", file=sys.stderr)
             except Exception as e:
-                print(f"警告: 创建 LLM 失败: {e}", file=sys.stderr)
-                print("将不生成摘要", file=sys.stderr)
+                print(f"Warning: Failed to create LLM: {e}", file=sys.stderr)
+                print("Summaries will not be generated", file=sys.stderr)
     
     # 创建构建器
     builder = TreeBuilder(
@@ -190,7 +190,7 @@ def main():
     )
     
     # 构建索引
-    print(f"正在处理: {args.md_path}", file=sys.stderr)
+    print(f"Processing: {args.md_path}", file=sys.stderr)
     index = builder.build_from_file(args.md_path)
     
     # 输出结果
@@ -211,14 +211,14 @@ def main():
     if output_path:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(result)
-        print(f"索引已保存到: {output_path}", file=sys.stderr)
+        print(f"Index saved to: {output_path}", file=sys.stderr)
         
         # 复制原始文件到输出目录
         src_file = os.path.abspath(args.md_path)
         dst_file = os.path.join(args.output_dir, os.path.basename(args.md_path))
         if src_file != os.path.abspath(dst_file):  # 避免复制到自身
             shutil.copy2(src_file, dst_file)
-            print(f"原始文件已复制到: {dst_file}", file=sys.stderr)
+            print(f"Original file copied to: {dst_file}", file=sys.stderr)
     
     # 如果指定了 --no-save 或者用户需要查看，输出到终端
     if args.no_save:
@@ -226,13 +226,13 @@ def main():
     
     # 输出统计信息
     all_nodes = index.get_all_nodes()
-    print(f"\n统计信息:", file=sys.stderr)
-    print(f"  - 文档标题: {index.title}", file=sys.stderr)
-    print(f"  - 总行数: {index.total_lines}", file=sys.stderr)
-    print(f"  - 节点数量: {len(all_nodes)}", file=sys.stderr)
-    print(f"  - 根节点数: {len(index.root_nodes)}", file=sys.stderr)
+    print(f"\nStatistics:", file=sys.stderr)
+    print(f"  - Document title: {index.title}", file=sys.stderr)
+    print(f"  - Total lines: {index.total_lines}", file=sys.stderr)
+    print(f"  - Node count: {len(all_nodes)}", file=sys.stderr)
+    print(f"  - Root nodes: {len(index.root_nodes)}", file=sys.stderr)
     if output_path:
-        print(f"  - 输出文件: {output_path}", file=sys.stderr)
+        print(f"  - Output file: {output_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

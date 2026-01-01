@@ -46,7 +46,7 @@ def url_to_filename(url: str) -> str:
 
 def crawl_single_page(args, indexer, output_dir):
     """爬取单个页面（原有逻辑）"""
-    print(f"正在抓取: {args.url}", file=sys.stderr)
+    print(f"Fetching: {args.url}", file=sys.stderr)
     
     # 用于保存 Markdown 内容
     markdown_content = None
@@ -55,7 +55,7 @@ def crawl_single_page(args, indexer, output_dir):
     page = indexer.get_page_with_markdown(args.url)
     
     if not page.is_success:
-        print(f"错误: 抓取失败 (状态码: {page.status_code})", file=sys.stderr)
+        print(f"Error: Fetch failed (status code: {page.status_code})", file=sys.stderr)
         sys.exit(1)
     
     markdown_content = page.markdown
@@ -64,7 +64,7 @@ def crawl_single_page(args, indexer, output_dir):
     if args.output_markdown:
         with open(args.output_markdown, 'w', encoding='utf-8') as f:
             f.write(page.markdown)
-        print(f"Markdown 已保存到: {args.output_markdown}", file=sys.stderr)
+        print(f"Markdown saved to: {args.output_markdown}", file=sys.stderr)
     
     # 生成索引
     index = indexer.tree_builder.build_from_content(page.markdown)
@@ -81,8 +81,8 @@ def crawl_single_page(args, indexer, output_dir):
 def crawl_multi_level(args, fetcher, converter, tree_builder, output_dir):
     """多层爬取"""
     level = args.level
-    level_desc = "无限深度" if level == 0xFF else f"{level} 层"
-    print(f"正在爬取: {args.url} (深度: {level_desc})", file=sys.stderr)
+    level_desc = "unlimited" if level == 0xFF else f"{level} levels"
+    print(f"Crawling: {args.url} (depth: {level_desc})", file=sys.stderr)
     
     # 创建爬虫
     crawler = WebCrawler(
@@ -99,10 +99,10 @@ def crawl_multi_level(args, fetcher, converter, tree_builder, output_dir):
         converter=converter,
     )
     
-    print(f"爬取完成: 成功 {result.success_count} 页, 失败 {result.failed_count} 页", file=sys.stderr)
+    print(f"Crawl completed: success {result.success_count} pages, failed {result.failed_count} pages", file=sys.stderr)
     
     if not result.pages:
-        print("错误: 没有成功爬取任何页面", file=sys.stderr)
+        print("Error: No pages were successfully crawled", file=sys.stderr)
         sys.exit(1)
     
     # 保存所有页面的 Markdown
@@ -117,7 +117,7 @@ def crawl_multi_level(args, fetcher, converter, tree_builder, output_dir):
                 f.write(page.markdown)
             saved_files.append(md_path)
     
-    print(f"已保存 {len(saved_files)} 个 Markdown 文件到 {output_dir}/", file=sys.stderr)
+    print(f"Saved {len(saved_files)} Markdown files to {output_dir}/", file=sys.stderr)
     
     # 为每个页面生成索引
     indexes = []
@@ -133,7 +133,7 @@ def crawl_multi_level(args, fetcher, converter, tree_builder, output_dir):
                 index.metadata["original_title"] = page.title
                 indexes.append(index)
             except Exception as e:
-                print(f"警告: 生成索引失败 {page.url}: {e}", file=sys.stderr)
+                print(f"Warning: Failed to generate index for {page.url}: {e}", file=sys.stderr)
     
     # 保存所有索引
     for idx, index in enumerate(indexes):
@@ -142,7 +142,7 @@ def crawl_multi_level(args, fetcher, converter, tree_builder, output_dir):
         with open(json_path, 'w', encoding='utf-8') as f:
             f.write(index.to_json(include_content=args.include_content, indent=2))
     
-    print(f"已保存 {len(indexes)} 个索引文件到 {output_dir}/", file=sys.stderr)
+    print(f"Saved {len(indexes)} index files to {output_dir}/", file=sys.stderr)
     
     # 返回第一个页面的索引作为主索引
     main_index = indexes[0] if indexes else None
@@ -335,12 +335,12 @@ def main():
     try:
         if config_file:
             config = IndexerConfig.from_file(config_file)
-            print(f"使用配置文件: {config_file}", file=sys.stderr)
+            print(f"Using config file: {config_file}", file=sys.stderr)
         else:
             config = IndexerConfig()
     except FileNotFoundError as e:
         if args.config:
-            print(f"错误: {e}", file=sys.stderr)
+            print(f"Error: {e}", file=sys.stderr)
             sys.exit(1)
         config = IndexerConfig()
     
@@ -361,18 +361,18 @@ def main():
     if use_llm_for_conversion or not args.no_summary:
         if not config.llm.api_key and config.llm.provider != "ollama":
             if use_llm_for_conversion:
-                print("警告: 未提供 API 密钥，将使用规则转换", file=sys.stderr)
+                print("Warning: No API key provided, using rule-based conversion", file=sys.stderr)
                 use_llm_for_conversion = False
             else:
-                print("警告: 未提供 API 密钥，将不生成摘要", file=sys.stderr)
+                print("Warning: No API key provided, summaries will not be generated", file=sys.stderr)
         else:
             try:
                 llm = LLMFactory.from_config(config.llm)
-                print(f"使用 LLM: {config.llm.provider}/{config.llm.model}", file=sys.stderr)
+                print(f"Using LLM: {config.llm.provider}/{config.llm.model}", file=sys.stderr)
             except Exception as e:
-                print(f"警告: 创建 LLM 失败: {e}", file=sys.stderr)
+                print(f"Warning: Failed to create LLM: {e}", file=sys.stderr)
                 if use_llm_for_conversion:
-                    print("将使用规则转换代替 LLM 转换", file=sys.stderr)
+                    print("Using rule-based conversion instead of LLM", file=sys.stderr)
                     use_llm_for_conversion = False
     
     # 创建抓取器
@@ -419,7 +419,7 @@ def main():
             if output_path:
                 with open(output_path, 'w', encoding='utf-8') as f:
                     f.write(result)
-                print(f"索引已保存到: {output_path}", file=sys.stderr)
+                print(f"Index saved to: {output_path}", file=sys.stderr)
                 
                 # 同时保存 Markdown 原始内容到 result 目录
                 if markdown_content and not args.output_markdown:
@@ -427,7 +427,7 @@ def main():
                     md_path = os.path.join(args.output_dir, f"{base_name}.md")
                     with open(md_path, 'w', encoding='utf-8') as f:
                         f.write(markdown_content)
-                    print(f"Markdown 已保存到: {md_path}", file=sys.stderr)
+                    print(f"Markdown saved to: {md_path}", file=sys.stderr)
             
             # 如果指定了 --no-save，输出到终端
             if args.no_save:
@@ -435,13 +435,13 @@ def main():
             
             # 输出统计信息
             all_nodes = index.get_all_nodes()
-            print(f"\n统计信息:", file=sys.stderr)
-            print(f"  - 文档标题: {index.title}", file=sys.stderr)
-            print(f"  - 来源 URL: {args.url}", file=sys.stderr)
-            print(f"  - 节点数量: {len(all_nodes)}", file=sys.stderr)
-            print(f"  - 根节点数: {len(index.root_nodes)}", file=sys.stderr)
+            print(f"\nStatistics:", file=sys.stderr)
+            print(f"  - Document title: {index.title}", file=sys.stderr)
+            print(f"  - Source URL: {args.url}", file=sys.stderr)
+            print(f"  - Node count: {len(all_nodes)}", file=sys.stderr)
+            print(f"  - Root nodes: {len(index.root_nodes)}", file=sys.stderr)
             if output_path:
-                print(f"  - 输出文件: {output_path}", file=sys.stderr)
+                print(f"  - Output file: {output_path}", file=sys.stderr)
         
         else:
             # 多层爬取模式
@@ -458,11 +458,11 @@ def main():
             )
             
             # 输出统计信息
-            print(f"\n统计信息:", file=sys.stderr)
-            print(f"  - 起始 URL: {args.url}", file=sys.stderr)
-            print(f"  - 爬取深度: {args.level}", file=sys.stderr)
-            print(f"  - 爬取页面数: {len(pages)}", file=sys.stderr)
-            print(f"  - 输出目录: {args.output_dir}", file=sys.stderr)
+            print(f"\nStatistics:", file=sys.stderr)
+            print(f"  - Start URL: {args.url}", file=sys.stderr)
+            print(f"  - Crawl depth: {args.level}", file=sys.stderr)
+            print(f"  - Pages crawled: {len(pages)}", file=sys.stderr)
+            print(f"  - Output directory: {args.output_dir}", file=sys.stderr)
             
     except Exception as e:
         print(f"错误: {e}", file=sys.stderr)
