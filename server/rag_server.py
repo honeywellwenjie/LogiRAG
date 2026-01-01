@@ -1489,17 +1489,34 @@ def chat():
             for ctx in contexts
         ]) if contexts else ""
 
-        # 3. Build LLM prompt
+        # 3. Build LLM prompt with current date/time
+        from datetime import datetime
+        current_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_date = datetime.now().strftime("%B %d, %Y")
+        current_year = datetime.now().year
+        
         kb_stats = get_knowledge_base_stats()
 
         if combined_context:
             system_prompt = f"""You are an intelligent assistant based on a knowledge base. Please answer the user's question based on the following knowledge base content.
 If there is no relevant information in the knowledge base, please honestly state that.
 
+**Current Date/Time Information:**
+- Current Date: {current_date}
+- Current Year: {current_year}
+- Current Timestamp: {current_datetime}
+
+Use the current date above for any time-related calculations (e.g., calculating years of experience, age, etc.).
+
 Knowledge Base Content:
 {combined_context}"""
         else:
-            system_prompt = "You are an intelligent assistant. No relevant content was found in the knowledge base for this question, please inform the user."
+            system_prompt = f"""You are an intelligent assistant. No relevant content was found in the knowledge base for this question, please inform the user.
+
+**Current Date/Time Information:**
+- Current Date: {current_date}
+- Current Year: {current_year}
+- Current Timestamp: {current_datetime}"""
 
         # 4. Call LLM to generate response
         try:
