@@ -58,10 +58,17 @@ LogiRAG uses **reasoning-based retrieval**:
 ## 🖼️ Screenshots
 
 ### Chat Demo with RAG Debug Panel
-- Left: RAG reasoning process, matched nodes, context statistics
-- Right: Chat interface with knowledge-based responses
+
+<img src="docs/images/logirag_demo.png" alt="LogiRAG Demo" width="100%">
+
+- **Left Panel**: RAG Debug Log showing reasoning process, matched nodes, and context statistics
+- **Right Panel**: Chat interface with knowledge-based responses
+- **99%+ Token Savings**: Only relevant sections are sent to LLM
 
 ### File Upload Interface
+
+<img src="docs/images/logirag_upload.png" alt="LogiRAG Upload" width="100%">
+
 - Drag-and-drop file upload
 - Optional LLM summary generation
 - Automatic indexing
