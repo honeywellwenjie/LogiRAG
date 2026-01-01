@@ -9,25 +9,47 @@ from typing import List, Optional, Dict, Any
 import re
 
 
-def extract_answer_from_reasoning(content: str) -> str:
+def clean_llm_output(content: str) -> str:
     """
-    从推理模型的输出中提取实际答案
-    处理 deepseek-r1 等模型的 <think>...</think> 格式
+    清理 LLM 输出内容
+    1. 处理 deepseek-r1 等推理模型的 <think>...</think> 格式
+    2. 移除常见的多余前缀（如 "摘要："、"Summary:" 等）
+    3. 清理 markdown 格式残留
     
     Args:
         content: LLM 原始输出内容
         
     Returns:
-        str: 移除思考过程后的实际答案
+        str: 清理后的实际答案
     """
     if not content:
         return ""
     
-    # 移除 <think>...</think> 块
-    # 使用 re.DOTALL 让 . 匹配换行符
+    # 1. 移除 <think>...</think> 块
     cleaned = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
     
+    # 2. 移除常见的多余前缀（中英文）
+    # 匹配开头的 "摘要："、"**摘要：**"、"Summary:"、"描述："等
+    prefix_patterns = [
+        r'^\*{0,2}摘要[:：]\*{0,2}\s*',
+        r'^\*{0,2}Summary[:：]\*{0,2}\s*',
+        r'^\*{0,2}描述[:：]\*{0,2}\s*',
+        r'^\*{0,2}Description[:：]\*{0,2}\s*',
+        r'^[:：]\s*',  # 单独的冒号开头
+    ]
+    for pattern in prefix_patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+    
+    # 3. 移除开头的换行符
+    cleaned = cleaned.lstrip('\n')
+    
     return cleaned.strip()
+
+
+# 保留旧函数名作为别名，保持向后兼容
+def extract_answer_from_reasoning(content: str) -> str:
+    """别名函数，调用 clean_llm_output"""
+    return clean_llm_output(content)
 
 
 @dataclass
@@ -131,25 +153,28 @@ class BaseLLM(ABC):
         Returns:
             str: 摘要文本
         """
-        system_prompt = """你是一个专业的文档分析助手。请为给定的内容生成简洁的摘要。
-摘要应该：
-1. 概括主要内容和关键信息
-2. 保持客观准确
-3. 长度控制在 50-150 字之间
-4. 使用与原文相同的语言"""
+        system_prompt = """You are a professional document analysis assistant. Generate a concise summary for the given content.
 
-        prompt = f"""请为以下内容生成摘要：
+Requirements:
+1. Summarize the main content and key information
+2. Be objective and accurate
+3. Keep the summary between 50-150 words
+4. Use the SAME language as the original content
+5. Output ONLY the summary text - NO prefixes like "Summary:", "摘要：", etc.
+6. Do NOT add any markdown formatting like ** or ##"""
 
-{f"上下文：{context}" if context else ""}
+        prompt = f"""Generate a summary for the following content:
 
-内容：
+{f"Context: {context}" if context else ""}
+
+Content:
 {content}
 
-请直接输出摘要，不要添加任何前缀或解释。"""
+Output ONLY the summary text, without any prefix, label, or explanation."""
 
         response = self.complete(prompt, system_prompt=system_prompt)
-        # 处理 deepseek-r1 等推理模型的 <think> 标签
-        return extract_answer_from_reasoning(response.content)
+        # 清理 LLM 输出（处理 <think> 标签和多余前缀）
+        return clean_llm_output(response.content)
     
     def generate_document_description(self, content_preview: str, toc: str = "") -> str:
         """
@@ -162,25 +187,28 @@ class BaseLLM(ABC):
         Returns:
             str: 文档描述
         """
-        system_prompt = """你是一个专业的文档分析助手。请根据文档的开头内容和目录结构，生成文档的整体描述。
-描述应该：
-1. 说明文档的主题和目的
-2. 概括主要涵盖的内容领域
-3. 长度控制在 100-200 字之间
-4. 使用与原文相同的语言"""
+        system_prompt = """You are a professional document analysis assistant. Generate an overall description for the document based on its content and structure.
 
-        prompt = f"""请为以下文档生成描述：
+Requirements:
+1. Describe the document's theme and purpose
+2. Summarize the main areas covered
+3. Keep the description between 100-300 words
+4. Use the SAME language as the original content
+5. Output ONLY the description text - NO prefixes like "Description:", "描述：", etc.
+6. Do NOT add any markdown formatting like ** or ##"""
 
-文档开头：
+        prompt = f"""Generate a description for the following document:
+
+Document preview:
 {content_preview}
 
-{f"目录结构：{toc}" if toc else ""}
+{f"Table of contents: {toc}" if toc else ""}
 
-请直接输出描述，不要添加任何前缀或解释。"""
+Output ONLY the description text, without any prefix, label, or explanation."""
 
         response = self.complete(prompt, system_prompt=system_prompt)
-        # 处理 deepseek-r1 等推理模型的 <think> 标签
-        return extract_answer_from_reasoning(response.content)
+        # 清理 LLM 输出（处理 <think> 标签和多余前缀）
+        return clean_llm_output(response.content)
     
     @abstractmethod
     def is_available(self) -> bool:
