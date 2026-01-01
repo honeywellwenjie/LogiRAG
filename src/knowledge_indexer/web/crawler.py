@@ -96,7 +96,7 @@ class WebCrawler:
         result = CrawlResult(url=start_url)
         
         # 爬取起始页面
-        logger.info(f"开始爬取: {start_url} (深度: {level})")
+        logger.info(f"Starting crawl: {start_url} (depth: {level})")
         
         urls_to_crawl = [(start_url, 0)]  # (url, current_depth)
         
@@ -130,7 +130,7 @@ class WebCrawler:
                         page = future.result()
                         if page and page.is_success:
                             result.pages.append(page)
-                            logger.info(f"[{len(result.pages)}/{self.max_pages}] 已爬取: {url}")
+                            logger.info(f"[{len(result.pages)}/{self.max_pages}] Crawled: {url}")
                             
                             # 如果还需要继续深入
                             max_depth = 255 if level == 0xFF else level
@@ -143,15 +143,15 @@ class WebCrawler:
                                         next_batch.append((link, depth + 1))
                         else:
                             result.failed_urls.append(url)
-                            logger.warning(f"爬取失败: {url}")
+                            logger.warning(f"Crawl failed: {url}")
                             
                     except Exception as e:
                         result.failed_urls.append(url)
-                        logger.error(f"爬取异常: {url} - {e}")
+                        logger.error(f"Crawl exception: {url} - {e}")
             
             urls_to_crawl = next_batch
         
-        logger.info(f"爬取完成: 成功 {result.success_count}, 失败 {result.failed_count}")
+        logger.info(f"Crawl completed: success {result.success_count}, failed {result.failed_count}")
         return result
     
     def _fetch_page(self, url: str) -> Optional[WebPage]:
@@ -159,7 +159,7 @@ class WebCrawler:
         try:
             return self.fetcher.fetch_with_metadata(url)
         except Exception as e:
-            logger.error(f"抓取失败: {url} - {e}")
+            logger.error(f"Fetch failed: {url} - {e}")
             return None
     
     def _extract_links(self, html: str, base_url: str) -> List[str]:

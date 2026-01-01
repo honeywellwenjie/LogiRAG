@@ -84,7 +84,7 @@ class HTMLToMarkdown:
         # 截断过长内容
         if len(content) > self.max_content_length:
             content = content[:self.max_content_length] + "\n...[内容已截断]..."
-            logger.warning(f"内容过长，已截断至 {self.max_content_length} 字符")
+            logger.warning(f"Content too long, truncated to {self.max_content_length} characters")
         
         # 使用 LLM 转换
         prompt = self.CONVERT_PROMPT.format(
@@ -105,11 +105,11 @@ class HTMLToMarkdown:
             # 清理可能的代码块包裹
             markdown = self._clean_markdown_output(markdown)
             
-            logger.info(f"HTML 转 Markdown 完成，生成 {len(markdown)} 字符")
+            logger.info(f"HTML to Markdown conversion complete, generated {len(markdown)} characters")
             return markdown
             
         except Exception as e:
-            logger.error(f"LLM 转换失败: {e}")
+            logger.error(f"LLM conversion failed: {e}")
             # 回退到简单转换
             return self._fallback_convert(html, title)
     
@@ -210,7 +210,7 @@ class HTMLToMarkdown:
             return '\n'.join(lines)
             
         except Exception as e:
-            logger.error(f"回退转换失败: {e}")
+            logger.error(f"Fallback conversion failed: {e}")
             return f"# {title}\n\n{self._extract_text(html)}"
 
 
@@ -254,7 +254,7 @@ class SimpleHTMLToMarkdown:
             return '\n'.join(lines)
             
         except ImportError:
-            logger.warning("BeautifulSoup 未安装，使用简单转换")
+            logger.warning("BeautifulSoup not installed, using simple conversion")
             text = re.sub(r'<[^>]+>', '', html)
             return f"# {title}\n\n{text}" if title else text
     

@@ -13,15 +13,52 @@ load_dotenv()
 
 
 def load_yaml_config(config_path: str) -> Dict[str, Any]:
-    """加载 YAML 配置文件"""
+    """加载 YAML 配置文件，带友好的错误提示"""
     try:
         import yaml
         with open(config_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f) or {}
+            content = f.read()
+            return yaml.safe_load(content) or {}
     except ImportError:
-        raise RuntimeError("pyyaml 未安装，请运行: pip install pyyaml")
+        raise RuntimeError("pyyaml not installed, run: pip install pyyaml")
     except FileNotFoundError:
-        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    except yaml.YAMLError as e:
+        # Provide user-friendly YAML error message
+        error_msg = f"\n{'='*60}\n"
+        error_msg += "❌ YAML Configuration Syntax Error!\n"
+        error_msg += f"📁 File: {config_path}\n"
+        error_msg += f"{'='*60}\n"
+        
+        if hasattr(e, 'problem_mark'):
+            mark = e.problem_mark
+            error_msg += f"📍 Location: Line {mark.line + 1}, Column {mark.column + 1}\n"
+            
+            # Show the problematic line with context
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    if mark.line < len(lines):
+                        error_msg += f"\nProblematic line:\n"
+                        # Show context
+                        start = max(0, mark.line - 2)
+                        end = min(len(lines), mark.line + 3)
+                        for i in range(start, end):
+                            prefix = ">>> " if i == mark.line else "    "
+                            error_msg += f"{prefix}{i+1:3d}| {lines[i].rstrip()}\n"
+                        if mark.column > 0:
+                            error_msg += f"    {' ' * (mark.column + 4)}^\n"
+            except:
+                pass
+        
+        error_msg += f"\n💡 Common causes:\n"
+        error_msg += f"   1. Inconsistent indentation (YAML requires same-level properties to have same indentation)\n"
+        error_msg += f"   2. Missing space after colon (correct: 'key: value')\n"
+        error_msg += f"   3. Unquoted special characters\n"
+        error_msg += f"\nOriginal error: {str(e)}\n"
+        error_msg += f"{'='*60}\n"
+        
+        raise ValueError(error_msg)
 
 
 @dataclass

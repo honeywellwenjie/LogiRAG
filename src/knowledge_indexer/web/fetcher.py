@@ -68,7 +68,7 @@ class WebFetcher:
             import requests
             self._requests = requests
         except ImportError:
-            logger.warning("requests 库未安装，请运行: pip install requests")
+            logger.warning("requests library not installed, run: pip install requests")
             self._requests = None
     
     def fetch(self, url: str) -> WebPage:
@@ -82,7 +82,7 @@ class WebFetcher:
             WebPage: 网页数据
         """
         if self._requests is None:
-            raise RuntimeError("requests 库未安装")
+            raise RuntimeError("requests library not installed")
         
         page = WebPage(url=url)
         
@@ -106,12 +106,12 @@ class WebFetcher:
                 page.title = self._extract_title(page.html)
                 page.text = self._extract_text(page.html)
                 
-                logger.info(f"成功抓取: {url} (标题: {page.title})")
+                logger.info(f"Successfully fetched: {url} (title: {page.title})")
             else:
-                logger.warning(f"抓取失败: {url} (状态码: {page.status_code})")
+                logger.warning(f"Fetch failed: {url} (status code: {page.status_code})")
                 
         except Exception as e:
-            logger.error(f"抓取异常: {url} - {e}")
+            logger.error(f"Fetch exception: {url} - {e}")
             page.metadata["error"] = str(e)
         
         return page
@@ -143,7 +143,7 @@ class WebFetcher:
             if match:
                 return match.group(1).strip()
         except Exception as e:
-            logger.warning(f"提取标题失败: {e}")
+            logger.warning(f"Failed to extract title: {e}")
         
         return "Untitled"
     
@@ -171,7 +171,7 @@ class WebFetcher:
             text = re.sub(r'<[^>]+>', '', text)
             return text.strip()
         except Exception as e:
-            logger.warning(f"提取文本失败: {e}")
+            logger.warning(f"Failed to extract text: {e}")
             return ""
     
     def fetch_with_metadata(self, url: str) -> WebPage:
@@ -219,7 +219,7 @@ class WebFetcher:
             except ImportError:
                 pass
             except Exception as e:
-                logger.warning(f"提取元数据失败: {e}")
+                logger.warning(f"Failed to extract metadata: {e}")
         
         return page
 

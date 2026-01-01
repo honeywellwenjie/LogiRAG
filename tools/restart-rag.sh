@@ -1,9 +1,9 @@
 #!/bin/bash
-# RAG 服务重启脚本（完全重建）
-# 用法: ./tools/restart-rag.sh
+# RAG Service Restart Script (Full Rebuild)
+# Usage: ./tools/restart-rag.sh
 #
-# 本服务运行在 knowledge-base-network 网络中
-# 其他项目应该加入此网络来使用 RAG 服务
+# This service runs on the knowledge-base-network network
+# Other projects should join this network to use the RAG service
 
 set -e
 
@@ -11,64 +11,64 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT/server"
 
-echo "🔄 正在完全重建 RAG 服务..."
+echo "🔄 Rebuilding RAG service..."
 echo ""
 
-# 停止并删除容器
-echo "🛑 停止并删除容器..."
+# Stop and remove container
+echo "🛑 Stopping and removing container..."
 docker compose down --rmi local 2>/dev/null || true
 
-# 删除旧镜像（如果存在）
-echo "🗑️  删除旧镜像..."
+# Remove old image (if exists)
+echo "🗑️  Removing old image..."
 docker rmi server-rag-server 2>/dev/null || true
 
-# 重新构建镜像
-echo "🔨 重新构建镜像..."
+# Rebuild image
+echo "🔨 Rebuilding image..."
 docker compose build --no-cache
 
-# 启动服务
-echo "🚀 启动服务..."
+# Start service
+echo "🚀 Starting service..."
 docker compose up -d
 
-# 等待服务启动
-echo "⏳ 等待服务启动..."
+# Wait for service to start
+echo "⏳ Waiting for service to start..."
 sleep 8
 
-# 检查健康状态
-echo "🏥 检查服务状态..."
+# Check health status
+echo "🏥 Checking service status..."
 if curl -s http://localhost:3003/health > /dev/null 2>&1; then
-    # 健康检查
+    # Health check
     STATUS=$(curl -s http://localhost:3003/health | python3 -c "import json,sys; print(json.load(sys.stdin).get('status','error'))")
-    echo "✅ 服务状态: $STATUS"
+    echo "✅ Service status: $STATUS"
     
-    # 获取统计信息
+    # Get statistics
     curl -s http://localhost:3003/fstats | python3 -c "
 import json, sys
 d = json.load(sys.stdin)
-print(f\"📚 已加载文档: {d.get('documents_loaded', 0)} 个\")
-print(f\"📊 知识库大小: {d.get('total_chars', 0):,} 字符 ({d.get('estimated_tokens', 0):,} tokens)\")
-print(f\"📝 总节点数: {d.get('total_nodes', 0)} 个\")
+print(f\"📚 Documents loaded: {d.get('documents_loaded', 0)}\")
+print(f\"📊 Knowledge base size: {d.get('total_chars', 0):,} chars ({d.get('estimated_tokens', 0):,} tokens)\")
+print(f\"📝 Total nodes: {d.get('total_nodes', 0)}\")
 "
 else
-    echo "❌ 服务启动失败，请检查日志："
+    echo "❌ Service failed to start, check logs:"
     docker logs server-rag-server-1 --tail 20
     exit 1
 fi
 
 echo ""
-echo "🎉 RAG 服务已完全重建并启动！"
+echo "🎉 RAG service has been fully rebuilt and started!"
 echo ""
-echo "📡 API 接口："
-echo "   - 演示页面: http://localhost:3003/demo"
-echo "   - 上传页面: http://localhost:3003/upload"
-echo "   - 健康检查: GET  http://localhost:3003/health"
-echo "   - 文件统计: GET  http://localhost:3003/fstats"
-echo "   - 查询接口: POST http://localhost:3003/query"
+echo "📡 API Endpoints:"
+echo "   - Demo page: http://localhost:3003/demo"
+echo "   - Upload page: http://localhost:3003/upload"
+echo "   - Health check: GET  http://localhost:3003/health"
+echo "   - File stats: GET  http://localhost:3003/fstats"
+echo "   - Query API: POST http://localhost:3003/query"
 echo ""
-echo "🌐 Docker 网络: knowledge-base-network"
+echo "🌐 Docker network: knowledge-base-network"
 echo ""
-echo "📌 其他项目连接方式："
-echo "   在 docker-compose.yml 中添加："
+echo "📌 How to connect from other projects:"
+echo "   Add to docker-compose.yml:"
 echo "   networks:"
 echo "     knowledge-base-network:"
 echo "       external: true"

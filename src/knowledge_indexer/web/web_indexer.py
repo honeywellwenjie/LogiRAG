@@ -70,13 +70,13 @@ class WebIndexer:
         Returns:
             DocumentIndex: 文档索引
         """
-        logger.info(f"开始索引网页: {url}")
+        logger.info(f"Starting web page indexing: {url}")
         
         # 1. 抓取网页
         page = self.fetcher.fetch_with_metadata(url)
         
         if not page.is_success:
-            raise RuntimeError(f"抓取网页失败: {url} (状态码: {page.status_code})")
+            raise RuntimeError(f"Failed to fetch web page: {url} (status code: {page.status_code})")
         
         # 2. 转换为 Markdown
         if self.use_llm_for_conversion and isinstance(self.converter, HTMLToMarkdown):
@@ -111,7 +111,7 @@ class WebIndexer:
         if not index.description and page.metadata.get('description'):
             index.description = page.metadata['description']
         
-        logger.info(f"网页索引完成: {url} (节点数: {len(index.get_all_nodes())})")
+        logger.info(f"Web page indexed: {url} (nodes: {len(index.get_all_nodes())})")
         
         return index
     
