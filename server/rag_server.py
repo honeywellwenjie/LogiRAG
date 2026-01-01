@@ -624,14 +624,14 @@ def allowed_file(filename):
 
 @app.route('/upload', methods=['GET'])
 def upload_page():
-    """文件上传页面"""
+    """File upload page"""
     html = '''
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>知识库文件上传</title>
+    <title>Knowledge Base Upload</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -772,14 +772,14 @@ def upload_page():
 </head>
 <body>
     <div class="container">
-        <h1>📚 知识库上传</h1>
-        <p class="subtitle">上传 Markdown 文件到知识库</p>
+        <h1>📚 Knowledge Base Upload</h1>
+        <p class="subtitle">Upload Markdown files to the knowledge base</p>
         
         <form id="uploadForm" enctype="multipart/form-data">
             <div class="upload-area" id="dropZone">
                 <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-                <p>点击或拖拽文件到这里</p>
-                <p class="hint">支持 .md, .markdown, .txt 文件</p>
+                <p>Click or drag files here</p>
+                <p class="hint">Supports .md, .markdown, .txt files</p>
                 <p class="file-name" id="fileName"></p>
             </div>
             <input type="file" id="fileInput" name="file" accept=".md,.markdown,.txt">
@@ -787,15 +787,15 @@ def upload_page():
             <div class="options">
                 <label class="option">
                     <input type="checkbox" id="useLlm" checked>
-                    使用 LLM 生成摘要
+                    Use LLM for summaries
                 </label>
                 <label class="option">
                     <input type="checkbox" id="includeContent" checked>
-                    包含原始内容
+                    Include content
                 </label>
             </div>
             
-            <button type="submit" id="submitBtn">上传并索引</button>
+            <button type="submit" id="submitBtn">Upload & Index</button>
         </form>
         
         <div class="status" id="status"></div>
@@ -841,13 +841,13 @@ def upload_page():
             
             if (!fileInput.files.length) {
                 status.className = 'status error';
-                status.textContent = '请选择文件';
+                status.textContent = 'Please select a file';
                 return;
             }
             
             submitBtn.disabled = true;
             status.className = 'status loading';
-            status.textContent = '正在上传并索引...';
+            status.textContent = 'Uploading and indexing...';
             
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
@@ -864,16 +864,16 @@ def upload_page():
                 
                 if (response.ok) {
                     status.className = 'status success';
-                    status.innerHTML = `✅ 上传成功！<br>文档: ${result.doc_name}<br>节点数: ${result.nodes}<br>摘要节点: ${result.nodes_with_summary}`;
+                    status.innerHTML = `✅ Upload successful!<br>Document: ${result.doc_name}<br>Nodes: ${result.nodes}<br>Summary nodes: ${result.nodes_with_summary}`;
                     fileInput.value = '';
                     fileName.textContent = '';
                 } else {
                     status.className = 'status error';
-                    status.textContent = '❌ ' + (result.error || '上传失败');
+                    status.textContent = '❌ ' + (result.error || 'Upload failed');
                 }
             } catch (err) {
                 status.className = 'status error';
-                status.textContent = '❌ 网络错误: ' + err.message;
+                status.textContent = '❌ Network error: ' + err.message;
             } finally {
                 submitBtn.disabled = false;
             }
@@ -887,17 +887,17 @@ def upload_page():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    """处理文件上传并索引"""
+    """Handle file upload and indexing"""
     try:
         if 'file' not in request.files:
-            return jsonify({'error': '没有文件'}), 400
+            return jsonify({'error': 'No file provided'}), 400
         
         file = request.files['file']
         if file.filename == '':
-            return jsonify({'error': '没有选择文件'}), 400
+            return jsonify({'error': 'No file selected'}), 400
         
         if not allowed_file(file.filename):
-            return jsonify({'error': '不支持的文件格式，请上传 .md, .markdown 或 .txt 文件'}), 400
+            return jsonify({'error': 'Unsupported file format. Please upload .md, .markdown or .txt files'}), 400
         
         # 安全的文件名
         filename = secure_filename(file.filename)
@@ -973,14 +973,14 @@ def upload_file():
 
 @app.route('/demo', methods=['GET'])
 def demo_page():
-    """聊天机器人演示页面"""
+    """Chatbot demo page"""
     html = '''
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>知识库 RAG 演示</title>
+    <title>LogiRAG Demo</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -1006,7 +1006,7 @@ def demo_page():
             height: 100vh;
             gap: 0;
         }
-        /* 左侧 RAG 日志面板 */
+        /* Left RAG Log Panel */
         .rag-panel {
             width: 380px;
             background: var(--bg-dark);
@@ -1094,7 +1094,7 @@ def demo_page():
             padding: 2rem;
             font-style: italic;
         }
-        /* 右侧聊天区域 */
+        /* Right Chat Area */
         .chat-area {
             flex: 1;
             display: flex;
@@ -1256,7 +1256,7 @@ def demo_page():
 </head>
 <body>
     <div class="container">
-        <!-- RAG 日志面板 -->
+        <!-- RAG Log Panel -->
         <div class="rag-panel">
             <div class="rag-header">
                 <div class="status-dot"></div>
@@ -1264,25 +1264,25 @@ def demo_page():
             </div>
             <div class="rag-content" id="ragLog">
                 <div class="rag-empty">
-                    等待对话...<br>
-                    发送消息后将显示 RAG 调试信息
+                    Waiting for conversation...<br>
+                    RAG debug info will appear after sending a message
                 </div>
             </div>
         </div>
 
-        <!-- 聊天区域 -->
+        <!-- Chat Area -->
         <div class="chat-area">
             <div class="chat-header">
                 <div class="chat-header-left">
                     <div class="emoji">🤖</div>
                     <div>
-                        <h1 class="chat-title">知识库 RAG 演示</h1>
-                        <p class="chat-subtitle">基于私有知识库的智能问答系统</p>
+                        <h1 class="chat-title">LogiRAG Demo</h1>
+                        <p class="chat-subtitle">Reasoning-based RAG with Tree Indexing</p>
                     </div>
                 </div>
                 <div class="nav-links">
-                    <a href="/upload">📤 上传文件</a>
-                    <a href="/fstats">📊 统计信息</a>
+                    <a href="/upload">📤 Upload</a>
+                    <a href="/fstats">📊 Stats</a>
                 </div>
             </div>
 
@@ -1291,18 +1291,18 @@ def demo_page():
                     <div class="message-avatar">Bot</div>
                     <div>
                         <div class="message-content">
-                            你好！我是知识库助手，可以回答关于知识库中内容的问题。请问有什么可以帮你的？
+                            Hello! I'm a knowledge base assistant. I can answer questions based on the indexed documents. How can I help you?
                         </div>
                         <div class="message-time" id="welcomeTime"></div>
                     </div>
                 </div>
             </div>
 
-            <div class="loading" id="loading">思考中...</div>
+            <div class="loading" id="loading">Thinking...</div>
 
             <div class="chat-input-area">
-                <textarea class="chat-input" id="input" placeholder="输入你的问题..." rows="1"></textarea>
-                <button class="send-btn" id="sendBtn">发送</button>
+                <textarea class="chat-input" id="input" placeholder="Type your question..." rows="1"></textarea>
+                <button class="send-btn" id="sendBtn">Send</button>
             </div>
         </div>
     </div>
@@ -1316,13 +1316,13 @@ def demo_page():
 
         document.getElementById('welcomeTime').textContent = new Date().toLocaleTimeString();
 
-        // 自动调整输入框高度
+        // Auto-resize input
         input.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
-        // 发送消息
+        // Send message
         async function sendMessage() {
             const text = input.value.trim();
             if (!text) return;
@@ -1347,10 +1347,10 @@ def demo_page():
                     addMessage(data.reply, 'bot');
                     updateRAGLog(data.debug);
                 } else {
-                    addMessage('抱歉，出现了错误: ' + (data.error || '未知错误'), 'bot');
+                    addMessage('Sorry, an error occurred: ' + (data.error || 'Unknown error'), 'bot');
                 }
             } catch (err) {
-                addMessage('网络错误，请重试', 'bot');
+                addMessage('Network error, please try again', 'bot');
             } finally {
                 input.disabled = false;
                 sendBtn.disabled = false;
@@ -1384,39 +1384,39 @@ def demo_page():
             
             ragLog.innerHTML = `
                 <div class="rag-section">
-                    <span class="rag-label">[时间]</span>
+                    <span class="rag-label">[Timestamp]</span>
                     <span class="rag-value info">${new Date().toLocaleString()}</span>
                 </div>
                 <div class="rag-section">
-                    <span class="rag-label">[问题]</span>
+                    <span class="rag-label">[Query]</span>
                     <span class="rag-value">${escapeHtml(debug.query)}</span>
                 </div>
                 <div class="rag-section">
-                    <span class="rag-label">[RAG 检索结果]</span>
+                    <span class="rag-label">[RAG Results]</span>
                     <div class="rag-value">
-                        <div>匹配节点: <span class="warning">${debug.nodes ? debug.nodes.join(', ') : 'None'}</span></div>
-                        <div>来源文件: <span class="info">${debug.source_files ? debug.source_files.join(', ') : 'None'}</span></div>
+                        <div>Matched Nodes: <span class="warning">${debug.nodes ? debug.nodes.join(', ') : 'None'}</span></div>
+                        <div>Source Files: <span class="info">${debug.source_files ? debug.source_files.join(', ') : 'None'}</span></div>
                     </div>
                 </div>
                 <div class="rag-section">
-                    <span class="rag-label">[推理过程]</span>
+                    <span class="rag-label">[Reasoning Process]</span>
                     <span class="rag-value">${escapeHtml(debug.thinking || 'N/A')}</span>
                 </div>
                 <div class="rag-section">
-                    <span class="rag-label">[上下文统计]</span>
+                    <span class="rag-label">[Context Stats]</span>
                     <div class="rag-comparison">
                         <div class="rag-row">
-                            <span class="rag-row-label">知识库总大小:</span>
-                            <span class="rag-row-value">${debug.kb_size ? debug.kb_size.chars.toLocaleString() : 0} 字符</span>
+                            <span class="rag-row-label">Total KB Size:</span>
+                            <span class="rag-row-value">${debug.kb_size ? debug.kb_size.chars.toLocaleString() : 0} chars</span>
                         </div>
                         <div class="rag-row">
-                            <span class="rag-row-label">RAG 上下文:</span>
-                            <span class="rag-row-value">${debug.context_size ? debug.context_size.toLocaleString() : 0} 字符</span>
+                            <span class="rag-row-label">RAG Context:</span>
+                            <span class="rag-row-value">${debug.context_size ? debug.context_size.toLocaleString() : 0} chars</span>
                         </div>
                     </div>
                     ${debug.kb_size && debug.context_size ? `
                     <div class="rag-saved">
-                        <div>节省: <span class="percent">${((1 - debug.context_size / debug.kb_size.chars) * 100).toFixed(1)}%</span></div>
+                        <div>Saved: <span class="percent">${((1 - debug.context_size / debug.kb_size.chars) * 100).toFixed(1)}%</span></div>
                     </div>` : ''}
                 </div>
             `;
@@ -1440,16 +1440,16 @@ def demo_page():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """聊天 API - 结合 RAG 和 LLM 生成回复"""
+    """Chat API - combines RAG retrieval and LLM response generation"""
     try:
         data = request.get_json()
         if not data or 'message' not in data:
-            return jsonify({'error': '缺少 message 字段'}), 400
+            return jsonify({'error': 'Missing message field'}), 400
 
         user_message = data['message']
         logger.info(f"Chat message: {user_message}")
 
-        # 1. 使用 RAG 检索相关上下文
+        # 1. Use RAG to retrieve relevant context
         try:
             import nest_asyncio
             try:
@@ -1467,7 +1467,7 @@ def chat():
             logger.error(f"RAG search failed: {e}")
             search_result = {'node_list': [], 'thinking': str(e)}
 
-        # 2. 提取上下文
+        # 2. Extract context
         node_list = search_result.get('node_list', [])
         contexts = retrieve_context(node_list) if node_list else []
 
@@ -1476,19 +1476,19 @@ def chat():
             for ctx in contexts
         ]) if contexts else ""
 
-        # 3. 构建 LLM 提示
+        # 3. Build LLM prompt
         kb_stats = get_knowledge_base_stats()
 
         if combined_context:
-            system_prompt = f"""你是一个基于知识库的智能助手。请根据以下知识库内容回答用户的问题。
-如果知识库中没有相关信息，请诚实地说明。
+            system_prompt = f"""You are an intelligent assistant based on a knowledge base. Please answer the user's question based on the following knowledge base content.
+If there is no relevant information in the knowledge base, please honestly state that.
 
-知识库内容:
+Knowledge Base Content:
 {combined_context}"""
         else:
-            system_prompt = "你是一个智能助手。当前知识库中没有找到与问题相关的内容，请告知用户。"
+            system_prompt = "You are an intelligent assistant. No relevant content was found in the knowledge base for this question, please inform the user."
 
-        # 4. 调用 LLM 生成回复
+        # 4. Call LLM to generate response
         try:
             llm_instance = get_llm()
             response = llm_instance.complete(
@@ -1500,7 +1500,7 @@ def chat():
 
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
-            reply = f"抱歉，生成回复时出错: {str(e)}"
+            reply = f"Sorry, an error occurred while generating response: {str(e)}"
 
         # 5. 返回结果
         return jsonify({
