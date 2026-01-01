@@ -624,8 +624,20 @@ def allowed_file(filename):
 
 @app.route('/upload', methods=['GET'])
 def upload_page():
-    """File upload page"""
-    html = '''
+    """File upload page with debug panel"""
+    # 获取 LLM 配置信息
+    llm_info = {'provider': 'unknown', 'model': 'unknown', 'api_base': 'unknown'}
+    try:
+        config = IndexerConfig.from_file()
+        llm_info = {
+            'provider': config.llm.provider,
+            'model': config.llm.model,
+            'api_base': config.llm.api_base
+        }
+    except:
+        pass
+    
+    html = f'''
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -633,17 +645,127 @@ def upload_page():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Knowledge Base Upload</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
+        :root {{
+            --primary: #4facfe;
+            --primary-dark: #00f2fe;
+            --bg-dark: #1a1a2e;
+            --bg-darker: #16213e;
+            --text-light: #e0e0e0;
+            --text-muted: #888;
+            --success: #2ed573;
+            --warning: #ffd700;
+            --info: #87ceeb;
+            --error: #ff4757;
+        }}
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: var(--bg-darker);
             min-height: 100vh;
+            color: var(--text-light);
+        }}
+        .page-container {{
+            display: flex;
+            height: 100vh;
+        }}
+        /* Left Debug Panel */
+        .debug-panel {{
+            width: 380px;
+            background: var(--bg-dark);
+            border-right: 1px solid #2d2d44;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }}
+        .debug-header {{
+            padding: 1rem 1.25rem;
+            background: linear-gradient(135deg, var(--bg-darker) 0%, var(--bg-dark) 100%);
+            border-bottom: 1px solid #2d2d44;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }}
+        .status-dot {{
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }}
+        @keyframes pulse {{
+            0%, 100% {{ opacity: 1; }}
+            50% {{ opacity: 0.5; }}
+        }}
+        .debug-header h3 {{
+            color: var(--success);
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: 'Fira Code', monospace;
+        }}
+        .debug-content {{
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+        }}
+        .debug-section {{
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #2d2d44;
+        }}
+        .debug-label {{
+            color: #7b68ee;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: block;
+        }}
+        .debug-value {{ color: #b8b8b8; word-wrap: break-word; }}
+        .debug-value.success {{ color: var(--success); }}
+        .debug-value.warning {{ color: var(--warning); }}
+        .debug-value.info {{ color: var(--info); }}
+        .debug-value.error {{ color: var(--error); }}
+        .debug-empty {{
+            color: var(--text-muted);
+            text-align: center;
+            padding: 2rem;
+            font-style: italic;
+        }}
+        .process-log {{
+            background: var(--bg-darker);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }}
+        .log-entry {{
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #2d2d44;
+        }}
+        .log-entry:last-child {{
+            border-bottom: none;
+        }}
+        .log-time {{
+            color: var(--text-muted);
+            font-size: 0.7rem;
+        }}
+        .log-msg {{
+            color: var(--text-light);
+        }}
+        .log-msg.success {{ color: var(--success); }}
+        .log-msg.error {{ color: var(--error); }}
+        .log-msg.info {{ color: var(--info); }}
+        /* Right Upload Area */
+        .upload-area-container {{
+            flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
-        }
-        .container {
+        }}
+        .container {{
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border-radius: 20px;
@@ -652,20 +774,20 @@ def upload_page():
             width: 100%;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
-        }
-        h1 {
+        }}
+        h1 {{
             color: #fff;
             text-align: center;
             margin-bottom: 10px;
             font-size: 1.8rem;
-        }
-        .subtitle {
+        }}
+        .subtitle {{
             color: rgba(255, 255, 255, 0.6);
             text-align: center;
             margin-bottom: 30px;
             font-size: 0.9rem;
-        }
-        .upload-area {
+        }}
+        .upload-area {{
             border: 2px dashed rgba(255, 255, 255, 0.3);
             border-radius: 15px;
             padding: 40px 20px;
@@ -673,44 +795,44 @@ def upload_page():
             transition: all 0.3s ease;
             cursor: pointer;
             margin-bottom: 20px;
-        }
-        .upload-area:hover, .upload-area.dragover {
+        }}
+        .upload-area:hover, .upload-area.dragover {{
             border-color: #4facfe;
             background: rgba(79, 172, 254, 0.1);
-        }
-        .upload-area svg {
+        }}
+        .upload-area svg {{
             width: 50px;
             height: 50px;
             fill: rgba(255, 255, 255, 0.5);
             margin-bottom: 15px;
-        }
-        .upload-area p {
+        }}
+        .upload-area p {{
             color: rgba(255, 255, 255, 0.7);
             margin-bottom: 10px;
-        }
-        .upload-area .hint {
+        }}
+        .upload-area .hint {{
             color: rgba(255, 255, 255, 0.4);
             font-size: 0.8rem;
-        }
-        input[type="file"] { display: none; }
-        .options {
+        }}
+        input[type="file"] {{ display: none; }}
+        .options {{
             display: flex;
             gap: 20px;
             margin-bottom: 20px;
-        }
-        .option {
+        }}
+        .option {{
             display: flex;
             align-items: center;
             gap: 8px;
             color: rgba(255, 255, 255, 0.8);
             font-size: 0.9rem;
-        }
-        .option input[type="checkbox"] {
+        }}
+        .option input[type="checkbox"] {{
             width: 18px;
             height: 18px;
             accent-color: #4facfe;
-        }
-        button {
+        }}
+        button {{
             width: 100%;
             padding: 15px;
             background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
@@ -721,41 +843,41 @@ def upload_page():
             font-weight: 600;
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
-        }
-        button:hover {
+        }}
+        button:hover {{
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(79, 172, 254, 0.4);
-        }
-        button:disabled {
+        }}
+        button:disabled {{
             opacity: 0.5;
             cursor: not-allowed;
             transform: none;
-        }
-        .status {
+        }}
+        .status {{
             margin-top: 20px;
             padding: 15px;
             border-radius: 10px;
             display: none;
-        }
-        .status.success {
+        }}
+        .status.success {{
             display: block;
             background: rgba(46, 213, 115, 0.2);
             border: 1px solid rgba(46, 213, 115, 0.5);
             color: #2ed573;
-        }
-        .status.error {
+        }}
+        .status.error {{
             display: block;
             background: rgba(255, 71, 87, 0.2);
             border: 1px solid rgba(255, 71, 87, 0.5);
             color: #ff4757;
-        }
-        .status.loading {
+        }}
+        .status.loading {{
             display: block;
             background: rgba(79, 172, 254, 0.2);
             border: 1px solid rgba(79, 172, 254, 0.5);
             color: #4facfe;
-        }
-        .file-name {
+        }}
+        .file-name {{
             color: #2ed573;
             margin-top: 15px;
             font-size: 1.1rem;
@@ -764,41 +886,91 @@ def upload_page():
             background: rgba(46, 213, 115, 0.15);
             border-radius: 8px;
             display: inline-block;
-        }
-        .file-name:empty {
+        }}
+        .file-name:empty {{
             display: none;
-        }
+        }}
+        .nav-link {{
+            display: block;
+            text-align: center;
+            margin-top: 20px;
+            color: var(--primary);
+            text-decoration: none;
+        }}
+        .nav-link:hover {{
+            text-decoration: underline;
+        }}
+        @media (max-width: 992px) {{
+            .page-container {{ flex-direction: column; }}
+            .debug-panel {{ width: 100%; height: 250px; border-right: none; border-bottom: 1px solid #2d2d44; }}
+        }}
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>📚 Knowledge Base Upload</h1>
-        <p class="subtitle">Upload Markdown files to the knowledge base</p>
-        
-        <form id="uploadForm" enctype="multipart/form-data">
-            <div class="upload-area" id="dropZone">
-                <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-                <p>Click or drag files here</p>
-                <p class="hint">Supports .md, .markdown, .txt files</p>
-                <p class="file-name" id="fileName"></p>
+    <div class="page-container">
+        <!-- Left Debug Panel -->
+        <div class="debug-panel">
+            <div class="debug-header">
+                <div class="status-dot"></div>
+                <h3>Index Debug Log</h3>
             </div>
-            <input type="file" id="fileInput" name="file" accept=".md,.markdown,.txt">
-            
-            <div class="options">
-                <label class="option">
-                    <input type="checkbox" id="useLlm" checked>
-                    Use LLM for summaries
-                </label>
-                <label class="option">
-                    <input type="checkbox" id="includeContent" checked>
-                    Include content
-                </label>
+            <div class="debug-content" id="debugLog">
+                <div class="debug-section">
+                    <span class="debug-label">[LLM Configuration]</span>
+                    <div class="debug-value">
+                        <div>Provider: <span class="warning">{llm_info['provider']}</span></div>
+                        <div>Model: <span class="success">{llm_info['model']}</span></div>
+                        <div>API Base: <span class="info">{llm_info['api_base']}</span></div>
+                    </div>
+                </div>
+                <div class="debug-section">
+                    <span class="debug-label">[Status]</span>
+                    <span class="debug-value info">Ready - Waiting for file upload...</span>
+                </div>
+                <div class="debug-section" id="processSection" style="display:none;">
+                    <span class="debug-label">[Processing Log]</span>
+                    <div class="process-log" id="processLog"></div>
+                </div>
+                <div class="debug-section" id="resultSection" style="display:none;">
+                    <span class="debug-label">[Index Result]</span>
+                    <div class="debug-value" id="indexResult"></div>
+                </div>
             </div>
-            
-            <button type="submit" id="submitBtn">Upload & Index</button>
-        </form>
-        
-        <div class="status" id="status"></div>
+        </div>
+
+        <!-- Right Upload Area -->
+        <div class="upload-area-container">
+            <div class="container">
+                <h1>📚 Knowledge Base Upload</h1>
+                <p class="subtitle">Upload Markdown files to the knowledge base</p>
+                
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="upload-area" id="dropZone">
+                        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+                        <p>Click or drag files here</p>
+                        <p class="hint">Supports .md, .markdown, .txt files</p>
+                        <p class="file-name" id="fileName"></p>
+                    </div>
+                    <input type="file" id="fileInput" name="file" accept=".md,.markdown,.txt">
+                    
+                    <div class="options">
+                        <label class="option">
+                            <input type="checkbox" id="useLlm" checked>
+                            Use LLM for summaries
+                        </label>
+                        <label class="option">
+                            <input type="checkbox" id="includeContent" checked>
+                            Include content
+                        </label>
+                    </div>
+                    
+                    <button type="submit" id="submitBtn">Upload & Index</button>
+                </form>
+                
+                <div class="status" id="status"></div>
+                <a href="/demo" class="nav-link">← Back to Demo</a>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -808,76 +980,132 @@ def upload_page():
         const form = document.getElementById('uploadForm');
         const status = document.getElementById('status');
         const submitBtn = document.getElementById('submitBtn');
+        const processSection = document.getElementById('processSection');
+        const processLog = document.getElementById('processLog');
+        const resultSection = document.getElementById('resultSection');
+        const indexResult = document.getElementById('indexResult');
+
+        function addLog(msg, type = '') {{
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-time">${{time}}</span> <span class="log-msg ${{type}}">${{msg}}</span>`;
+            processLog.appendChild(entry);
+            processLog.scrollTop = processLog.scrollHeight;
+        }}
 
         dropZone.addEventListener('click', () => fileInput.click());
         
-        dropZone.addEventListener('dragover', (e) => {
+        dropZone.addEventListener('dragover', (e) => {{
             e.preventDefault();
             dropZone.classList.add('dragover');
-        });
+        }});
         
-        dropZone.addEventListener('dragleave', () => {
+        dropZone.addEventListener('dragleave', () => {{
             dropZone.classList.remove('dragover');
-        });
+        }});
         
-        dropZone.addEventListener('drop', (e) => {
+        dropZone.addEventListener('drop', (e) => {{
             e.preventDefault();
             dropZone.classList.remove('dragover');
             const files = e.dataTransfer.files;
-            if (files.length > 0) {
+            if (files.length > 0) {{
                 fileInput.files = files;
                 fileName.textContent = files[0].name;
-            }
-        });
+                addLog(`File selected: ${{files[0].name}}`, 'info');
+            }}
+        }});
         
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
+        fileInput.addEventListener('change', () => {{
+            if (fileInput.files.length > 0) {{
                 fileName.textContent = fileInput.files[0].name;
-            }
-        });
+                processSection.style.display = 'block';
+                processLog.innerHTML = '';
+                addLog(`File selected: ${{fileInput.files[0].name}}`, 'info');
+            }}
+        }});
 
-        form.addEventListener('submit', async (e) => {
+        form.addEventListener('submit', async (e) => {{
             e.preventDefault();
             
-            if (!fileInput.files.length) {
+            if (!fileInput.files.length) {{
                 status.className = 'status error';
                 status.textContent = 'Please select a file';
+                addLog('Error: No file selected', 'error');
                 return;
-            }
+            }}
             
             submitBtn.disabled = true;
             status.className = 'status loading';
             status.textContent = 'Uploading and indexing...';
+            processSection.style.display = 'block';
+            resultSection.style.display = 'none';
+            
+            const useLlm = document.getElementById('useLlm').checked;
+            const includeContent = document.getElementById('includeContent').checked;
+            
+            addLog('Starting upload...', 'info');
+            addLog(`Options: use_llm=${{useLlm}}, include_content=${{includeContent}}`, 'info');
             
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            formData.append('use_llm', document.getElementById('useLlm').checked);
-            formData.append('include_content', document.getElementById('includeContent').checked);
+            formData.append('use_llm', useLlm);
+            formData.append('include_content', includeContent);
             
-            try {
-                const response = await fetch('/upload', {
+            try {{
+                addLog('Sending file to server...', 'info');
+                const startTime = Date.now();
+                
+                const response = await fetch('/upload', {{
                     method: 'POST',
                     body: formData
-                });
+                }});
                 
                 const result = await response.json();
+                const duration = ((Date.now() - startTime) / 1000).toFixed(2);
                 
-                if (response.ok) {
+                if (response.ok) {{
+                    const llmInfo = result.llm_info || {{}};
+                    addLog(`Upload completed in ${{duration}}s`, 'success');
+                    addLog(`Document: ${{result.doc_name}}`, 'success');
+                    addLog(`Total nodes: ${{result.nodes}}`, 'success');
+                    addLog(`Summary nodes: ${{result.nodes_with_summary}}`, 'success');
+                    if (llmInfo.model) {{
+                        addLog(`LLM used: ${{llmInfo.provider}}/${{llmInfo.model}}`, 'info');
+                    }}
+                    
                     status.className = 'status success';
-                    status.innerHTML = `✅ Upload successful!<br>Document: ${result.doc_name}<br>Nodes: ${result.nodes}<br>Summary nodes: ${result.nodes_with_summary}`;
+                    status.innerHTML = `✅ Upload successful!<br>Document: ${{result.doc_name}}<br>Nodes: ${{result.nodes}}<br>Summary nodes: ${{result.nodes_with_summary}}`;
+                    
+                    // Show result section
+                    resultSection.style.display = 'block';
+                    indexResult.innerHTML = `
+                        <div>Document: <span class="success">${{result.doc_name}}</span></div>
+                        <div>Total Nodes: <span class="warning">${{result.nodes}}</span></div>
+                        <div>Summary Nodes: <span class="info">${{result.nodes_with_summary}}</span></div>
+                        <div>Processing Time: <span class="info">${{duration}}s</span></div>
+                        <div>Index File: <span class="info">${{result.index_file || 'N/A'}}</span></div>
+                        <div style="margin-top:10px; padding-top:10px; border-top:1px solid #2d2d44;">
+                            <div>LLM Provider: <span class="warning">${{llmInfo.provider || 'N/A'}}</span></div>
+                            <div>LLM Model: <span class="success">${{llmInfo.model || 'N/A'}}</span></div>
+                        </div>
+                    `;
+                    
                     fileInput.value = '';
                     fileName.textContent = '';
-                } else {
+                }} else {{
+                    addLog(`Error: ${{result.error || 'Upload failed'}}`, 'error');
                     status.className = 'status error';
                     status.textContent = '❌ ' + (result.error || 'Upload failed');
-                }
-            } catch (err) {
+                }}
+            }} catch (err) {{
+                addLog(`Network error: ${{err.message}}`, 'error');
                 status.className = 'status error';
                 status.textContent = '❌ Network error: ' + err.message;
-            } finally {
+            }} finally {{
                 submitBtn.disabled = false;
-            }
-        });
+            }}
+        }});
     </script>
 </body>
 </html>
@@ -955,13 +1183,27 @@ def upload_file():
         
         logger.info(f"Index created: {index_path} ({len(index.get_all_nodes())} nodes)")
         
+        # 获取 LLM 配置信息
+        llm_info = {'provider': 'N/A', 'model': 'N/A', 'api_base': 'N/A'}
+        if use_llm:
+            try:
+                config = IndexerConfig.from_file()
+                llm_info = {
+                    'provider': config.llm.provider,
+                    'model': config.llm.model,
+                    'api_base': config.llm.api_base
+                }
+            except:
+                pass
+        
         return jsonify({
             'status': 'ok',
             'doc_name': doc_name,
             'nodes': len(index.get_all_nodes()),
             'nodes_with_summary': sum(1 for n in index.get_all_nodes() if n.summary),
             'md_file': md_path,
-            'index_file': index_path
+            'index_file': index_path,
+            'llm_info': llm_info
         })
         
     except Exception as e:
@@ -1432,10 +1674,19 @@ def demo_page():
             const savedTokens = kbTokens - ctxTokens;
             const savedPercent = kbChars > 0 ? ((savedChars / kbChars) * 100).toFixed(1) : '0.0';
             
+            const llmInfo = debug.llm_info || {};
             ragLog.innerHTML = `
                 <div class="rag-section">
                     <span class="rag-label">[Timestamp]</span>
                     <span class="rag-value info">${new Date().toLocaleString()}</span>
+                </div>
+                <div class="rag-section">
+                    <span class="rag-label">[LLM Model]</span>
+                    <div class="rag-value">
+                        <div>Provider: <span class="warning">${llmInfo.provider || 'unknown'}</span></div>
+                        <div>Model: <span class="success">${llmInfo.model || 'unknown'}</span></div>
+                        <div>API Base: <span class="info">${llmInfo.api_base || 'unknown'}</span></div>
+                    </div>
                 </div>
                 <div class="rag-section">
                     <span class="rag-label">[Query]</span>
@@ -1575,6 +1826,22 @@ Knowledge Base Content:
             reply = f"Sorry, an error occurred while generating response: {str(e)}"
 
         # 5. Return result with enhanced debug info
+        # 获取 LLM 模型信息
+        llm_info = {
+            'provider': 'unknown',
+            'model': 'unknown',
+            'api_base': 'unknown'
+        }
+        try:
+            config = IndexerConfig.from_file()
+            llm_info = {
+                'provider': config.llm.provider,
+                'model': config.llm.model,
+                'api_base': config.llm.api_base
+            }
+        except:
+            pass
+        
         return jsonify({
             'reply': reply,
             'debug': {
@@ -1587,7 +1854,8 @@ Knowledge Base Content:
                     'chars': kb_stats['total_chars'],
                     'tokens': kb_stats['estimated_tokens']
                 },
-                'llm_response': reply
+                'llm_response': reply,
+                'llm_info': llm_info
             }
         })
 
