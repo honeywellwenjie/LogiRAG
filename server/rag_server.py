@@ -1382,6 +1382,14 @@ def demo_page():
         function updateRAGLog(debug) {
             if (!debug) return;
             
+            const kbChars = debug.kb_size ? debug.kb_size.chars : 0;
+            const kbTokens = debug.kb_size ? debug.kb_size.tokens : 0;
+            const ctxChars = debug.context_size || 0;
+            const ctxTokens = Math.floor(ctxChars / 3);
+            const savedChars = kbChars - ctxChars;
+            const savedTokens = kbTokens - ctxTokens;
+            const savedPercent = kbChars > 0 ? ((savedChars / kbChars) * 100).toFixed(1) : '0.0';
+            
             ragLog.innerHTML = `
                 <div class="rag-section">
                     <span class="rag-label">[Timestamp]</span>
@@ -1394,6 +1402,8 @@ def demo_page():
                 <div class="rag-section">
                     <span class="rag-label">[RAG Results]</span>
                     <div class="rag-value">
+                        <div>Status: <span class="success">${debug.nodes && debug.nodes.length > 0 ? 'Success' : 'No matches'}</span></div>
+                        <div>RAG Server: <span class="info">${window.location.origin}/query</span></div>
                         <div>Matched Nodes: <span class="warning">${debug.nodes ? debug.nodes.join(', ') : 'None'}</span></div>
                         <div>Source Files: <span class="info">${debug.source_files ? debug.source_files.join(', ') : 'None'}</span></div>
                     </div>
@@ -1403,21 +1413,24 @@ def demo_page():
                     <span class="rag-value">${escapeHtml(debug.thinking || 'N/A')}</span>
                 </div>
                 <div class="rag-section">
-                    <span class="rag-label">[Context Stats]</span>
+                    <span class="rag-label">[Full Context Comparison]</span>
                     <div class="rag-comparison">
                         <div class="rag-row">
-                            <span class="rag-row-label">Total KB Size:</span>
-                            <span class="rag-row-value">${debug.kb_size ? debug.kb_size.chars.toLocaleString() : 0} chars</span>
+                            <span class="rag-row-label">Full Knowledge Base:</span>
+                            <span class="rag-row-value">${kbChars.toLocaleString()} chars (${kbTokens.toLocaleString()} tokens)</span>
                         </div>
                         <div class="rag-row">
-                            <span class="rag-row-label">RAG Context:</span>
-                            <span class="rag-row-value">${debug.context_size ? debug.context_size.toLocaleString() : 0} chars</span>
+                            <span class="rag-row-label">RAG Context Sent:</span>
+                            <span class="rag-row-value">${ctxChars.toLocaleString()} chars (${ctxTokens.toLocaleString()} tokens)</span>
                         </div>
                     </div>
-                    ${debug.kb_size && debug.context_size ? `
                     <div class="rag-saved">
-                        <div>Saved: <span class="percent">${((1 - debug.context_size / debug.kb_size.chars) * 100).toFixed(1)}%</span></div>
-                    </div>` : ''}
+                        <div>Tokens Saved: <span class="percent">${savedPercent}%</span> (${savedTokens.toLocaleString()} tokens)</div>
+                    </div>
+                </div>
+                <div class="rag-section">
+                    <span class="rag-label">[LLM Response]</span>
+                    <span class="rag-value">${escapeHtml(debug.llm_response || 'N/A').substring(0, 500)}${debug.llm_response && debug.llm_response.length > 500 ? '...' : ''}</span>
                 </div>
             `;
         }
@@ -1502,7 +1515,7 @@ Knowledge Base Content:
             logger.error(f"LLM call failed: {e}")
             reply = f"Sorry, an error occurred while generating response: {str(e)}"
 
-        # 5. 返回结果
+        # 5. Return result with enhanced debug info
         return jsonify({
             'reply': reply,
             'debug': {
@@ -1514,7 +1527,8 @@ Knowledge Base Content:
                 'kb_size': {
                     'chars': kb_stats['total_chars'],
                     'tokens': kb_stats['estimated_tokens']
-                }
+                },
+                'llm_response': reply
             }
         })
 
