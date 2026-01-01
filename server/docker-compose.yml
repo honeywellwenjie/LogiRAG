@@ -1,0 +1,31 @@
+services:
+  rag-server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - RAG_SERVER_PORT=3003
+      # LLM configuration (can be overridden by config.yaml or .env)
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4o}
+    volumes:
+      # Mount result directory (indexes)
+      - ../result:/app/result
+      # Mount config file
+      - ../config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3003/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+# Optional: Add network for integration with other services
+networks:
+  default:
+    name: knowledge-base-network
+
