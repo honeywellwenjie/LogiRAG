@@ -230,6 +230,10 @@ Return ONLY the JSON structure."""
         response = llm_instance.complete(search_prompt, temperature=0.1)
         result = response.content.strip()
         
+        # 处理 deepseek-r1 等推理模型的 <think>...</think> 标签
+        import re
+        result = re.sub(r'<think>.*?</think>', '', result, flags=re.DOTALL).strip()
+        
         # 清理 markdown 代码块
         if result.startswith('```'):
             lines = result.split('\n')
@@ -1820,6 +1824,10 @@ Knowledge Base Content:
                 temperature=0.7
             )
             reply = response.content
+            
+            # 处理 deepseek-r1 等推理模型的 <think>...</think> 标签
+            import re
+            reply = re.sub(r'<think>.*?</think>', '', reply, flags=re.DOTALL).strip()
 
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
