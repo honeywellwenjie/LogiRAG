@@ -1114,7 +1114,38 @@ def demo_page():
             align-items: center;
             gap: 1rem;
         }
-        .chat-header .emoji { font-size: 2.5rem; }
+        .chat-header .logo-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            position: relative;
+            overflow: hidden;
+        }
+        .chat-header .logo-icon::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            animation: shimmer 3s infinite;
+        }
+        @keyframes shimmer {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(100%) rotate(45deg); }
+        }
+        .chat-header .logo-icon svg {
+            width: 32px;
+            height: 32px;
+            fill: white;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+        }
         .chat-title {
             font-size: 1.25rem;
             font-weight: 700;
@@ -1274,7 +1305,18 @@ def demo_page():
         <div class="chat-area">
             <div class="chat-header">
                 <div class="chat-header-left">
-                    <div class="emoji">🤖</div>
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <!-- Futuristic AI Brain Icon -->
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                            <!-- Neural network dots -->
+                            <circle cx="12" cy="12" r="1.5" opacity="0.8"/>
+                            <circle cx="8" cy="10" r="1" opacity="0.6"/>
+                            <circle cx="16" cy="10" r="1" opacity="0.6"/>
+                            <circle cx="10" cy="15" r="0.8" opacity="0.5"/>
+                            <circle cx="14" cy="15" r="0.8" opacity="0.5"/>
+                        </svg>
+                    </div>
                     <div>
                         <h1 class="chat-title">LogiRAG Demo</h1>
                         <p class="chat-subtitle">Reasoning-based RAG with Tree Indexing</p>
