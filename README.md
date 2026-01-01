@@ -10,7 +10,7 @@
 
 *No Vector DB • No Chunking • Human-like Retrieval • Multi-LLM Support*
 
-[English](#-introduction) | [中文](#-简介-1)
+[English](README.md) | [中文](README_CN.md)
 
 </div>
 
@@ -303,58 +303,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 📢 简介
-
-**LogiRAG** 是一个开源的、基于推理的 RAG（检索增强生成）系统，灵感来自 [PageIndex](https://github.com/VectifyAI/PageIndex)。它从文档构建层次化的树形索引，并使用 LLM 推理来导航和检索相关内容——就像人类阅读文档一样。
-
-### 为什么选择 LogiRAG？
-
-传统的基于向量的 RAG 依赖于**语义相似性**，但**相似 ≠ 相关**。在处理需要专业知识和多步推理的专业文档时，相似性搜索往往不够用。
-
-LogiRAG 使用**基于推理的检索**：
-1. 从文档构建"目录"式的**树形结构**
-2. 使用 LLM **推理**遍历树来找到相关章节
-
-### ✨ 特性亮点
-
-| 特性 | 描述 |
-|------|------|
-| 🚫 **无向量数据库** | 使用文档结构和 LLM 推理，而非向量相似性 |
-| 🚫 **无分块** | 文档按自然章节组织，而非人为切分 |
-| 🧠 **类人检索** | 模拟专家浏览复杂文档的方式 |
-| 🌐 **网页爬取** | 支持多层链接跟踪的网页爬取和索引 |
-| 🖥️ **Web 界面** | 内置聊天演示和文件上传界面 |
-| 🤖 **多 LLM 支持** | 支持 OpenAI、Ollama、DeepSeek、Azure、vLLM、LocalAI 等 |
-| 🐳 **Docker 就绪** | 一键 Docker Compose 部署 |
-| 💬 **聊天演示** | 带 RAG 调试面板的交互式聊天界面 |
-| 📊 **节省 Token** | 通常可节省 95%+ 的 Token |
-
-### 🚀 快速开始
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/yourusername/LogiRAG.git
-cd LogiRAG
-
-# 2. 配置 LLM
-cp config.example.yaml config.yaml
-# 编辑 config.yaml 填入你的 API 密钥
-
-# 3. 启动服务
-./tools/restart-rag.sh
-
-# 4. 访问界面
-# 聊天演示: http://localhost:3003/demo
-# 文件上传: http://localhost:3003/upload
-```
-
----
-
 ## ⭐ Star History
 
-如果你觉得这个项目有用，请给它一个 ⭐！
+If you find this project useful, please consider giving it a ⭐!
 
-你的 Star 帮助更多人发现这个项目，也激励我们持续开发。
+Your star helps others discover this project and motivates continued development.
 
 [![Star this repo](https://img.shields.io/github/stars/yourusername/LogiRAG?style=social)](https://github.com/yourusername/LogiRAG)
 
@@ -362,7 +315,7 @@ cp config.example.yaml config.yaml
 
 <div align="center">
 
-**[⬆ 返回顶部](#-logirag)**
+**[⬆ Back to Top](#-logirag)**
 
 Made with ❤️ by the LogiRAG Community
 
