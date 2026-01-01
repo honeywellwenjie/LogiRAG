@@ -1,0 +1,26 @@
+# RAG Server dependencies
+
+# Web framework
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# LLM clients
+openai>=1.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+pyyaml>=6.0.0
+
+# For async in sync context
+nest-asyncio>=1.6.0
+
+# HTTP client
+requests>=2.31.0
+httpx>=0.25.0
+
+# HTML parsing (for web indexer)
+beautifulsoup4>=4.12.0
+
+
+
