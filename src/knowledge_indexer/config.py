@@ -53,7 +53,16 @@ class LLMConfig:
 @dataclass 
 class IndexerConfig:
     """索引器配置"""
-    llm: LLMConfig = field(default_factory=LLMConfig)
+    # RAG LLM (用于 RAG 搜索和索引生成)
+    rag_llm: LLMConfig = field(default_factory=LLMConfig)
+    
+    # Chat LLM (可选，用于聊天回复，如不配置则使用 rag_llm)
+    chat_llm: Optional[LLMConfig] = None
+    
+    # 向后兼容：llm 属性指向 rag_llm
+    @property
+    def llm(self) -> LLMConfig:
+        return self.rag_llm
     
     # 索引生成配置
     max_tokens_per_node: int = 20000
@@ -117,23 +126,39 @@ class IndexerConfig:
         """从 YAML 配置文件创建配置"""
         data = load_yaml_config(config_path)
         
-        # 解析 LLM 配置
-        llm_data = data.get("llm", {})
-        llm_config = LLMConfig(
-            provider=llm_data.get("provider", "openai"),
-            api_key=llm_data.get("api_key"),
-            api_base=llm_data.get("api_base"),
-            model=llm_data.get("model", "gpt-4o"),
-            temperature=float(llm_data.get("temperature", 0.1)),
-            max_tokens=int(llm_data.get("max_tokens", 4096)),
-            timeout=int(llm_data.get("timeout", 60)),
+        # 解析 RAG LLM 配置 (用于 RAG 搜索和索引)
+        # 支持新的 rag_llm 和旧的 llm 配置名
+        rag_llm_data = data.get("rag_llm") or data.get("llm", {})
+        rag_llm_config = LLMConfig(
+            provider=rag_llm_data.get("provider", "openai"),
+            api_key=rag_llm_data.get("api_key"),
+            api_base=rag_llm_data.get("api_base"),
+            model=rag_llm_data.get("model", "gpt-4o"),
+            temperature=float(rag_llm_data.get("temperature", 0.1)),
+            max_tokens=int(rag_llm_data.get("max_tokens", 4096)),
+            timeout=int(rag_llm_data.get("timeout", 60)),
         )
+        
+        # 解析 Chat LLM 配置 (可选，用于聊天回复)
+        chat_llm_config = None
+        chat_llm_data = data.get("chat_llm", {})
+        if chat_llm_data:
+            chat_llm_config = LLMConfig(
+                provider=chat_llm_data.get("provider", "openai"),
+                api_key=chat_llm_data.get("api_key"),
+                api_base=chat_llm_data.get("api_base"),
+                model=chat_llm_data.get("model", "gpt-4o"),
+                temperature=float(chat_llm_data.get("temperature", 0.7)),
+                max_tokens=int(chat_llm_data.get("max_tokens", 4096)),
+                timeout=int(chat_llm_data.get("timeout", 60)),
+            )
         
         # 解析索引器配置
         indexer_data = data.get("indexer", {})
         
         return cls(
-            llm=llm_config,
+            rag_llm=rag_llm_config,
+            chat_llm=chat_llm_config,
             add_node_id=indexer_data.get("add_node_id", True),
             add_node_summary=indexer_data.get("add_node_summary", True),
             add_doc_description=indexer_data.get("add_doc_description", True),
