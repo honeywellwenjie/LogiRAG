@@ -278,6 +278,50 @@ web:
 
 ---
 
+## 🏠 Local LLM Support & Limitations
+
+LogiRAG supports local LLMs through Ollama, vLLM, LocalAI, and other OpenAI-compatible servers.
+
+### ✅ What Works
+
+| Feature | Local LLM Status |
+|---------|------------------|
+| **Index Generation** | ✅ Works well with DeepSeek-R1 (1.5B to 32B) |
+| **Node Summaries** | ✅ Generated correctly |
+| **Document Descriptions** | ✅ Generated correctly |
+| **`<think>` Tag Handling** | ✅ Automatically cleaned for reasoning models |
+
+### ⚠️ Known Limitations
+
+| Feature | Local LLM Status |
+|---------|------------------|
+| **RAG Retrieval** | ⚠️ Limited accuracy |
+| **Query Understanding** | ⚠️ May misinterpret user intent |
+| **JSON Response Format** | ⚠️ Sometimes returns empty or malformed |
+
+**Current Status:**
+- Local models (tested: DeepSeek-R1 1.5B ~ 32B) can successfully generate tree indexes with summaries
+- However, during RAG retrieval, the LLM's reasoning capability is limited, often resulting in:
+  - Misunderstanding query intent
+  - Returning empty node lists
+  - Selecting irrelevant sections
+
+### 🧪 Help Us Test!
+
+We're looking for community feedback on which local models work best for RAG retrieval:
+
+- **Your Model**: Which local model did you test?
+- **Index Generation**: Did it work?
+- **RAG Retrieval**: Did it correctly match relevant nodes?
+- **Configuration**: What settings worked best?
+
+**Please submit your findings as a GitHub Issue!** Your feedback will help us:
+1. Identify the minimum model size/capability for effective RAG
+2. Optimize prompts for local models
+3. Potentially add model-specific optimizations
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
