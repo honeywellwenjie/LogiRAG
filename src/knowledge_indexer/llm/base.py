@@ -6,6 +6,28 @@ LLM 抽象基类
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
+import re
+
+
+def extract_answer_from_reasoning(content: str) -> str:
+    """
+    从推理模型的输出中提取实际答案
+    处理 deepseek-r1 等模型的 <think>...</think> 格式
+    
+    Args:
+        content: LLM 原始输出内容
+        
+    Returns:
+        str: 移除思考过程后的实际答案
+    """
+    if not content:
+        return ""
+    
+    # 移除 <think>...</think> 块
+    # 使用 re.DOTALL 让 . 匹配换行符
+    cleaned = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL)
+    
+    return cleaned.strip()
 
 
 @dataclass
@@ -126,7 +148,8 @@ class BaseLLM(ABC):
 请直接输出摘要，不要添加任何前缀或解释。"""
 
         response = self.complete(prompt, system_prompt=system_prompt)
-        return response.content.strip()
+        # 处理 deepseek-r1 等推理模型的 <think> 标签
+        return extract_answer_from_reasoning(response.content)
     
     def generate_document_description(self, content_preview: str, toc: str = "") -> str:
         """
@@ -156,7 +179,8 @@ class BaseLLM(ABC):
 请直接输出描述，不要添加任何前缀或解释。"""
 
         response = self.complete(prompt, system_prompt=system_prompt)
-        return response.content.strip()
+        # 处理 deepseek-r1 等推理模型的 <think> 标签
+        return extract_answer_from_reasoning(response.content)
     
     @abstractmethod
     def is_available(self) -> bool:
