@@ -80,7 +80,7 @@ LogiRAG uses **reasoning-based retrieval**:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/LogiRAG.git](https://github.com/yourusername/LogiRAG.git
+git clone https://github.com/yourusername/LogiRAG.git
 cd LogiRAG
 ```
 
