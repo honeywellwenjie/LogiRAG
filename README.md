@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 LogiRAG
+# LogiRAG
 
 **Reasoning-based RAG with Tree Indexing**
 
