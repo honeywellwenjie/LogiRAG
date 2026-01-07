@@ -589,13 +589,6 @@ def query():
         if mode is None:
             mode = config.retrieval.mode
 
-        # DEBUG: 记录用户请求
-        debug_request('/query', 'POST', {
-            'query': query_text,
-            'mode': mode,
-            'multi_round': use_multi_round
-        })
-
         logger.info(f"Query: {query_text} (mode={mode}, multi_round={use_multi_round})")
 
         if not document_indexes:
@@ -669,9 +662,7 @@ def query():
             })
 
         contexts = retrieve_context(node_list)
-
-        # DEBUG: 记录上下文提取结果
-        debug_context_retrieval(contexts)
+        logger.debug(f"Retrieved {len(contexts)} contexts from {len(node_list)} nodes")
 
         # Build combined context
         combined_context = "\n\n".join([
@@ -704,15 +695,13 @@ def query():
             }
         }
 
-        # DEBUG: 记录最终响应
         request_duration = time.time() - request_start
-        debug_response('/query', 'success', response_data, request_duration)
+        logger.info(f"Query completed in {request_duration:.2f}s with {len(contexts)} contexts")
 
         return jsonify(response_data)
 
     except Exception as e:
         logger.error(f"Query error: {str(e)}", exc_info=True)
-        debug_print(f"❌ Query 错误: {str(e)}", level="error")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1996,11 +1985,7 @@ def chat():
         user_message = data['message']
         logger.info(f"Chat message: {user_message}")
 
-        # DEBUG: 记录聊天请求
-        debug_request('/chat', 'POST', {'message': user_message})
-
         # 1. Use RAG to retrieve relevant context
-        debug_print("🔍 步骤1: RAG检索", {"查询": user_message}, level="search")
 
         try:
             import nest_asyncio
@@ -2015,25 +2000,17 @@ def chat():
                 rag_start = time.time()
                 search_result = loop.run_until_complete(enhanced_tree_search(user_message))
                 rag_duration = time.time() - rag_start
-                debug_print(
-                    "🔍 RAG检索完成",
-                    {"耗时": f"{rag_duration:.2f}秒", "结果数": len(search_result.get('node_list', []))},
-                    level="result"
-                )
+                logger.info(f"RAG search completed in {rag_duration:.2f}s with {len(search_result.get('node_list', []))} nodes")
             finally:
                 loop.close()
         except Exception as e:
             logger.error(f"RAG search failed: {e}")
-            debug_print(f"❌ RAG检索失败: {e}", level="error")
             search_result = {'node_list': [], 'thinking': str(e)}
 
         # 2. Extract context
         node_list = search_result.get('node_list', [])
         contexts = retrieve_context(node_list) if node_list else []
-
-        # DEBUG: 记录上下文提取
-        if contexts:
-            debug_context_retrieval(contexts)
+        logger.debug(f"Retrieved {len(contexts)} contexts")
 
         combined_context = "\\n\\n".join([
             f"## {ctx['title']}\\n{ctx['content']}"
@@ -2069,21 +2046,11 @@ Knowledge Base Content:
 - Current Year: {current_year}
 - Current Timestamp: {current_datetime}"""
 
-        # DEBUG: 记录 Chat LLM 调用
-        debug_print(
-            "💬 步骤2: 生成回复",
-            {
-                "使用知识库": bool(combined_context),
-                "上下文长度": len(combined_context),
-                "系统提示词长度": len(system_prompt)
-            },
-            level="llm"
-        )
-
         # 4. Call Chat LLM to generate response (may be different from RAG LLM)
         try:
             llm_start = time.time()
             chat_llm_instance = get_chat_llm()
+            logger.debug(f"Calling Chat LLM with context size: {len(combined_context)}")
             response = chat_llm_instance.complete(
                 prompt=user_message,
                 system_prompt=system_prompt,
@@ -2095,16 +2062,11 @@ Knowledge Base Content:
             # 处理 deepseek-r1 等推理模型的 <think>...</think> 标签
             import re
             reply = re.sub(r'<think>.*?</think>', '', reply, flags=re.DOTALL).strip()
-
-            debug_print(
-                "💬 回复生成完成",
-                {"耗时": f"{llm_duration:.2f}秒", "回复长度": len(reply)},
-                level="success"
-            )
+            llm_duration = time.time() - llm_start
+            logger.info(f"Chat LLM response generated in {llm_duration:.2f}s")
 
         except Exception as e:
             logger.error(f"Chat LLM call failed: {e}")
-            debug_print(f"❌ Chat LLM 调用失败: {e}", level="error")
             reply = f"Sorry, an error occurred while generating response: {str(e)}"
 
         # 5. Return result with enhanced debug info
@@ -2138,14 +2100,7 @@ Knowledge Base Content:
         except:
             pass
         
-        # DEBUG: 记录最终聊天响应
-        chat_duration = time.time() - chat_start
-        debug_chat_response(
-            query=user_message,
-            response=reply,
-            context_used=bool(combined_context),
-            duration=chat_duration
-        )
+        logger.info(f"Chat response generated in {time.time() - chat_start:.2f}s")
 
         return jsonify({
             'reply': reply,
@@ -2168,7 +2123,6 @@ Knowledge Base Content:
 
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
-        debug_print(f"❌ Chat 错误: {str(e)}", level="error")
         return jsonify({'error': str(e)}), 500
 
 
