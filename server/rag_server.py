@@ -33,16 +33,39 @@ from knowledge_indexer.retrieval.reasoning import ReasoningChain
 from knowledge_indexer.retrieval.vector_index import VectorIndex
 from knowledge_indexer.retrieval.hybrid_search import HybridSearchEngine, HybridSearchConfig, RetrievalMode
 from knowledge_indexer.embedding.factory import EmbeddingFactory
-from knowledge_indexer.debug_utils import (
-    debug_print, debug_request, debug_response, debug_context_retrieval,
-    debug_chat_response, DEBUG_SEPARATOR
-)
 
 # Load environment variables
 load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# ============ Configure logging properly ============
+def setup_logging():
+    """设置完整的日志系统 - 确保包括所有组件的日志"""
+    # 清除现有的 handlers（防止重复）
+    logging.getLogger().handlers = []
+    
+    # 创建格式化器 - 包含时间、模块、级别、消息
+    formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)-8s] %(name)-40s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # 添加控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    console_handler.setFormatter(formatter)
+    
+    # 配置根 logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    root_logger.addHandler(console_handler)
+    
+    # 压制 Flask 和 werkzeug 的过度日志（只显示 WARNING 及以上）
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    logging.getLogger('flask').setLevel(logging.WARNING)
+    logging.getLogger('flask.app').setLevel(logging.WARNING)
+
+# 在 Flask app 创建之前调用
+setup_logging()
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
