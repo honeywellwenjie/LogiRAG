@@ -12,6 +12,7 @@ preventing token explosion when knowledge base has many documents.
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Set, Tuple
 from enum import Enum
@@ -19,6 +20,10 @@ from enum import Enum
 from .tree_search import TreeSearchEngine, SearchContext, SearchResult
 from .vector_index import VectorIndex, VectorSearchResult
 from ..models.tree_node import DocumentIndex, TreeNode
+from ..debug_utils import (
+    debug_print, debug_vector_search, debug_rag_results,
+    debug_rag_search_start, DebugTimer
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,12 +122,41 @@ class HybridSearchEngine:
         """
         mode = mode or self.config.mode
 
+        # DEBUG: 记录搜索开始
+        debug_rag_search_start(query, mode.value, len(documents))
+        debug_print(
+            "🔄 混合搜索引擎启动",
+            {
+                "查询": query,
+                "模式": mode.value,
+                "文档数": len(documents),
+                "配置": {
+                    "向量权重": self.config.vector_weight,
+                    "推理权重": self.config.reasoning_weight,
+                    "向量top_k": self.config.vector_top_k,
+                    "推理最大候选": self.config.reasoning_max_candidates,
+                }
+            },
+            level="start"
+        )
+
+        search_start = time.time()
+
         if mode == RetrievalMode.VECTOR:
-            return await self._vector_only_search(query)
+            debug_print("📊 使用纯向量模式", level="info")
+            results = await self._vector_only_search(query)
         elif mode == RetrievalMode.REASONING:
-            return await self._reasoning_only_search(query, documents, node_maps)
+            debug_print("🧠 使用纯推理模式", level="info")
+            results = await self._reasoning_only_search(query, documents, node_maps)
         else:  # HYBRID
-            return await self._hybrid_search(query, documents, node_maps)
+            debug_print("🔀 使用混合模式 (向量+推理)", level="info")
+            results = await self._hybrid_search(query, documents, node_maps)
+
+        # DEBUG: 记录最终结果
+        search_duration = time.time() - search_start
+        debug_rag_results(results, mode.value, search_duration)
+
+        return results
 
     def search_sync(
         self,
@@ -229,16 +263,29 @@ class HybridSearchEngine:
         3. Results are fused with weighted scoring
         """
         # Step 1: Vector pre-filtering
+        debug_print(
+            "📊 步骤1: 向量预过滤",
+            {"top_k": self.config.vector_top_k, "阈值": self.config.vector_threshold},
+            level="search"
+        )
+
         logger.info(f"Hybrid search: Vector pre-filtering (top_k={self.config.vector_top_k})")
+
+        vector_start = time.time()
         vector_results = self.vector_index.search(
             query,
             top_k=self.config.vector_top_k,
             use_chunk_aggregation=self.config.use_chunk_aggregation,
             threshold=self.config.vector_threshold,
         )
+        vector_duration = time.time() - vector_start
+
+        # DEBUG: 记录向量搜索结果
+        debug_vector_search(query, self.config.vector_top_k, vector_results, vector_duration)
 
         if not vector_results:
             logger.warning("No vector results, falling back to reasoning-only")
+            debug_print("⚠️ 向量搜索无结果，回退到纯推理模式", level="warning")
             return await self._reasoning_only_search(query, documents, node_maps)
 
         # Step 2: Filter documents for LLM reasoning
@@ -249,9 +296,25 @@ class HybridSearchEngine:
             if name in candidate_docs
         }
 
+        debug_print(
+            "📊 步骤2: 过滤文档用于LLM推理",
+            {
+                "向量结果数": len(vector_results),
+                "候选文档": list(candidate_docs),
+                "过滤后文档数": len(filtered_documents)
+            },
+            level="info"
+        )
+
         logger.info(f"Hybrid search: LLM reasoning on {len(filtered_documents)} documents")
 
         # Step 3: LLM reasoning on filtered documents
+        debug_print(
+            "🧠 步骤3: LLM推理",
+            {"处理文档数": len(filtered_documents), "最大候选数": self.config.reasoning_max_candidates},
+            level="search"
+        )
+
         reasoning_results = []
         if filtered_documents:
             context = SearchContext(
@@ -263,7 +326,10 @@ class HybridSearchEngine:
             )
 
             try:
+                reasoning_start = time.time()
                 tree_results = await self.tree_search.search(context)
+                reasoning_duration = time.time() - reasoning_start
+
                 reasoning_results = [
                     HybridSearchResult(
                         doc_name=r.doc_name,
@@ -276,11 +342,58 @@ class HybridSearchEngine:
                     )
                     for r in tree_results
                 ]
+
+                debug_print(
+                    "🧠 LLM推理完成",
+                    {
+                        "耗时": f"{reasoning_duration:.2f}秒",
+                        "结果数": len(reasoning_results),
+                        "结果": [
+                            {"文档": r.doc_name, "节点": r.node_id, "分数": round(r.reasoning_score or 0, 4)}
+                            for r in reasoning_results[:5]
+                        ]
+                    },
+                    level="result"
+                )
+
             except Exception as e:
                 logger.warning(f"Reasoning search failed: {e}, using vector results only")
+                debug_print(f"❌ LLM推理失败: {e}", level="error")
 
         # Step 4: Fuse results
-        return self._merge_results(vector_results, reasoning_results)
+        debug_print(
+            "🔀 步骤4: 结果融合",
+            {
+                "向量结果数": len(vector_results),
+                "推理结果数": len(reasoning_results),
+                "向量权重": self.config.vector_weight,
+                "推理权重": self.config.reasoning_weight
+            },
+            level="info"
+        )
+
+        merged_results = self._merge_results(vector_results, reasoning_results)
+
+        debug_print(
+            "✅ 融合完成",
+            {
+                "最终结果数": len(merged_results),
+                "结果详情": [
+                    {
+                        "文档": r.doc_name,
+                        "节点": r.node_id,
+                        "最终分数": round(r.final_score, 4),
+                        "向量分数": round(r.vector_score or 0, 4),
+                        "推理分数": round(r.reasoning_score or 0, 4),
+                        "来源": r.source
+                    }
+                    for r in merged_results[:5]
+                ]
+            },
+            level="success"
+        )
+
+        return merged_results
 
     def _merge_results(
         self,
