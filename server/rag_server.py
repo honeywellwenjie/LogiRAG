@@ -29,6 +29,9 @@ from knowledge_indexer import LLMFactory, IndexerConfig, TreeBuilder, DocumentIn
 from knowledge_indexer.llm.base import BaseLLM
 from knowledge_indexer.retrieval.tree_search import TreeSearchEngine, SimpleTreeSearch, SearchContext
 from knowledge_indexer.retrieval.reasoning import ReasoningChain
+from knowledge_indexer.retrieval.vector_index import VectorIndex
+from knowledge_indexer.retrieval.hybrid_search import HybridSearchEngine, HybridSearchConfig, RetrievalMode
+from knowledge_indexer.embedding.factory import EmbeddingFactory
 
 # Load environment variables
 load_dotenv()
@@ -59,6 +62,10 @@ node_maps: dict = {}
 search_engine: TreeSearchEngine = None
 simple_search: SimpleTreeSearch = None
 chat_llm: BaseLLM = None  # Separate LLM for chat responses
+# Hybrid retrieval globals
+vector_index: VectorIndex = None
+hybrid_engine: HybridSearchEngine = None
+embedding_provider = None
 
 
 def get_llm() -> BaseLLM:
@@ -111,6 +118,60 @@ def get_simple_search() -> SimpleTreeSearch:
     return simple_search
 
 
+def get_embedding_provider():
+    """Get or create embedding provider for hybrid retrieval"""
+    global embedding_provider
+    if embedding_provider is None:
+        try:
+            config = IndexerConfig.from_file()
+            embedding_provider = EmbeddingFactory.from_config(config.embedding)
+            logger.info(f"Embedding provider initialized: {config.embedding.provider}/{config.embedding.model}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize embedding provider: {e}, hybrid mode disabled")
+            return None
+    return embedding_provider
+
+
+def get_vector_index() -> VectorIndex:
+    """Get or create vector index"""
+    global vector_index
+    if vector_index is None:
+        emb = get_embedding_provider()
+        if emb is not None:
+            vector_index = VectorIndex(emb)
+    return vector_index
+
+
+def get_hybrid_engine() -> HybridSearchEngine:
+    """Get or create hybrid search engine"""
+    global hybrid_engine
+    if hybrid_engine is None:
+        vi = get_vector_index()
+        if vi is not None:
+            config = IndexerConfig.from_file()
+            retrieval_cfg = config.retrieval
+
+            hybrid_config = HybridSearchConfig(
+                mode=RetrievalMode(retrieval_cfg.mode),
+                vector_top_k=retrieval_cfg.vector.top_k,
+                vector_threshold=retrieval_cfg.vector.threshold,
+                use_chunk_aggregation=retrieval_cfg.vector.use_chunk_aggregation,
+                reasoning_max_candidates=retrieval_cfg.reasoning.max_candidates,
+                vector_weight=retrieval_cfg.hybrid.vector_weight,
+                reasoning_weight=retrieval_cfg.hybrid.reasoning_weight,
+                max_results=retrieval_cfg.max_results,
+                min_relevance=retrieval_cfg.min_relevance,
+            )
+
+            hybrid_engine = HybridSearchEngine(
+                tree_search_engine=get_search_engine(),
+                vector_index=vi,
+                config=hybrid_config,
+            )
+            logger.info(f"Hybrid search engine initialized (mode={retrieval_cfg.mode})")
+    return hybrid_engine
+
+
 def create_node_mapping(index: DocumentIndex) -> dict:
     """Create a mapping from node_id to node for quick lookup"""
     node_map = {}
@@ -123,7 +184,7 @@ def create_node_mapping(index: DocumentIndex) -> dict:
 def load_all_indexes():
     """Load all index files from results directory"""
     global document_indexes, node_maps
-    
+
     for filename in os.listdir(RESULTS_DIR):
         if filename.endswith('_index.json'):
             filepath = os.path.join(RESULTS_DIR, filename)
@@ -137,7 +198,7 @@ def load_all_indexes():
                 logger.info(f"Loaded index: {filename} ({len(index.get_all_nodes())} nodes)")
             except Exception as e:
                 logger.error(f"Failed to load index {filename}: {e}")
-    
+
     for filename in os.listdir(KNOWLEDGE_BASE_DIR):
         if filename.endswith('.md'):
             doc_name = filename.replace('.md', '')
@@ -151,8 +212,66 @@ def load_all_indexes():
                     logger.info(f"Generated index for: {filename} ({len(index.get_all_nodes())} nodes)")
                 except Exception as e:
                     logger.error(f"Failed to generate index for {filename}: {e}")
-    
+
     logger.info(f"Total documents loaded: {len(document_indexes)}")
+
+    # Build vector index for hybrid retrieval
+    _build_vector_index()
+
+
+def _build_vector_index():
+    """Build or load vector index for hybrid retrieval"""
+    global vector_index
+
+    config = IndexerConfig.from_file()
+    retrieval_mode = config.retrieval.mode
+
+    # Skip if mode is reasoning-only
+    if retrieval_mode == "reasoning":
+        logger.info("Retrieval mode is 'reasoning', skipping vector index")
+        return
+
+    vi = get_vector_index()
+    if vi is None:
+        logger.warning("Vector index not available, hybrid mode disabled")
+        return
+
+    vector_index_path = os.path.join(RESULTS_DIR, "vector_index.json")
+
+    # Check if vector index exists and is up-to-date
+    if os.path.exists(vector_index_path):
+        try:
+            vi.load(vector_index_path)
+            logger.info(f"Loaded existing vector index: {len(vi)} nodes")
+
+            # Verify it covers all documents
+            indexed_docs = set(vi.get_stats().get("documents", []))
+            current_docs = set(document_indexes.keys())
+
+            missing_docs = current_docs - indexed_docs
+            if missing_docs:
+                logger.info(f"Adding {len(missing_docs)} new documents to vector index")
+                for doc_name in missing_docs:
+                    vi.add_document(doc_name, document_indexes[doc_name])
+                vi.save(vector_index_path)
+            return
+        except Exception as e:
+            logger.warning(f"Failed to load vector index: {e}, rebuilding...")
+
+    # Build new vector index
+    logger.info("Building vector index for hybrid retrieval...")
+    for doc_name, index in document_indexes.items():
+        try:
+            vi.add_document(doc_name, index)
+        except Exception as e:
+            logger.error(f"Failed to index document {doc_name}: {e}")
+
+    # Save vector index
+    try:
+        vi.save(vector_index_path)
+        logger.info(f"Vector index saved: {len(vi)} nodes")
+    except Exception as e:
+        logger.error(f"Failed to save vector index: {e}")
 
 
 def get_enhanced_tree_structure() -> dict:
@@ -419,53 +538,87 @@ def fstats():
 def query():
     """
     Main query endpoint - compatible with wenjie-webui RAG interface
-    
-    增强功能：
-    - 使用节点 summary 进行更准确的搜索
-    - 多轮推理（可选）
-    - 置信度评分
+
+    Features:
+    - Hybrid retrieval mode: combines vector pre-filtering with LLM reasoning
+    - Supports mode selection: reasoning, vector, hybrid
+    - Backward compatible with existing parameters
     """
     try:
         data = request.get_json()
         if not data or 'query' not in data:
             return jsonify({'error': 'Missing "query" field'}), 400
-        
+
         query_text = data['query']
-        use_enhanced = data.get('enhanced', True)  # 默认使用增强搜索
-        use_multi_round = data.get('multi_round', False)  # 多轮搜索（更慢但更准确）
-        
-        logger.info(f"Query: {query_text} (enhanced={use_enhanced}, multi_round={use_multi_round})")
-        
+        # Mode selection: reasoning, vector, hybrid (default from config)
+        mode = data.get('mode', None)
+        use_multi_round = data.get('multi_round', False)
+
+        # Get config for default mode
+        config = IndexerConfig.from_file()
+        if mode is None:
+            mode = config.retrieval.mode
+
+        logger.info(f"Query: {query_text} (mode={mode}, multi_round={use_multi_round})")
+
         if not document_indexes:
             return jsonify({
                 'error': 'No documents loaded',
                 'context': '',
                 'answer': ''
             }), 500
-        
-        # 执行搜索
+
+        # Execute search based on mode
         try:
             import nest_asyncio
             try:
                 nest_asyncio.apply()
             except:
                 pass
-            
+
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                if use_multi_round:
-                    search_result = loop.run_until_complete(multi_round_search(query_text))
+                # Use hybrid engine if available and mode is not pure reasoning
+                hybrid_eng = get_hybrid_engine()
+                if hybrid_eng is not None and mode in ('hybrid', 'vector'):
+                    retrieval_mode = RetrievalMode(mode)
+                    results = loop.run_until_complete(
+                        hybrid_eng.search(
+                            query=query_text,
+                            documents=document_indexes,
+                            node_maps=node_maps,
+                            mode=retrieval_mode,
+                        )
+                    )
+                    # Convert to compatible format
+                    node_list = [
+                        {
+                            'doc_name': r.doc_name,
+                            'node_id': r.node_id,
+                            'relevance': r.final_score,
+                        }
+                        for r in results
+                    ]
+                    thinking = '\n'.join([
+                        f"- {r.doc_name}/{r.node_id}: {r.reasoning or f'score={r.final_score:.2f}'}"
+                        for r in results[:3]
+                    ])
+                    search_result = {'node_list': node_list, 'thinking': thinking}
                 else:
-                    search_result = loop.run_until_complete(enhanced_tree_search(query_text))
+                    # Fallback to original reasoning-based search
+                    if use_multi_round:
+                        search_result = loop.run_until_complete(multi_round_search(query_text))
+                    else:
+                        search_result = loop.run_until_complete(enhanced_tree_search(query_text))
             finally:
                 loop.close()
-                
+
         except Exception as e:
             logger.error(f"Search failed: {e}")
             return jsonify({'error': f'Search failed: {str(e)}'}), 500
-        
-        # 提取上下文
+
+        # Extract context
         node_list = search_result.get('node_list', [])
         if not node_list:
             logger.warning(f"No relevant nodes for: {query_text}")
@@ -474,25 +627,26 @@ def query():
                 'answer': '',
                 'nodes': [],
                 'source_files': [],
-                'thinking': search_result.get('thinking', 'No relevant information found.')
+                'thinking': search_result.get('thinking', 'No relevant information found.'),
+                'mode': mode,
             })
-        
+
         contexts = retrieve_context(node_list)
-        
-        # 组合上下文
+
+        # Build combined context
         combined_context = "\n\n".join([
             f"## [{ctx['doc_name']}] {ctx['title']}\n{ctx['content']}"
             for ctx in contexts
         ])
-        
-        logger.info(f"Retrieved {len(contexts)} nodes")
-        
-        # 提取唯一的源文件列表（兼容 wenjie-webui）
+
+        logger.info(f"Retrieved {len(contexts)} nodes (mode={mode})")
+
+        # Extract unique source files
         source_files = list(set(ctx['doc_name'] for ctx in contexts))
-        
-        # 获取知识库统计（用于 wenjie-webui 显示）
+
+        # Get knowledge base stats
         kb_stats = get_knowledge_base_stats()
-        
+
         return jsonify({
             'context': combined_context,
             'answer': combined_context,
@@ -503,13 +657,13 @@ def query():
                 f"{ctx['doc_name']}:{ctx['node_id']}": ctx.get('relevance', 0.5)
                 for ctx in contexts
             },
-            # 知识库统计（用于 Full Knowledge Base 显示）
+            'mode': mode,  # Return the mode used
             'knowledge_base_size': {
                 'chars': kb_stats['total_chars'],
                 'tokens': kb_stats['estimated_tokens']
             }
         })
-        
+
     except Exception as e:
         logger.error(f"Query error: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500

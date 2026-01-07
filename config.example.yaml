@@ -42,6 +42,60 @@ indexer:
   add_node_summary: true
   add_doc_description: true
   max_depth: 6
+  generate_embeddings: true  # Generate embeddings for hybrid retrieval
+
+# ===========================================
+# Embedding Configuration (for hybrid retrieval)
+# ===========================================
+embedding:
+  # Provider: sentence_transformer (local, recommended) or openai
+  provider: sentence_transformer
+
+  # Model name - for sentence_transformer, use HuggingFace model names
+  # Recommended: all-MiniLM-L6-v2 (fast, 384 dims)
+  # Alternative: all-mpnet-base-v2 (better quality, 768 dims)
+  # Multilingual: paraphrase-multilingual-MiniLM-L12-v2
+  model: "all-MiniLM-L6-v2"
+
+  # Device: cpu, cuda, mps (Apple Silicon)
+  device: "cpu"
+
+  # For OpenAI embeddings (if provider is openai):
+  # api_key: "your-api-key"  # Defaults to rag_llm.api_key
+  # model: "text-embedding-3-small"  # or text-embedding-3-large
+
+# ===========================================
+# Retrieval Configuration
+# ===========================================
+retrieval:
+  # Mode: reasoning (LLM only), vector (embedding only), hybrid (both)
+  # - reasoning: Original mode, accurate but can hit token limits with many docs
+  # - vector: Fast but may miss semantic nuances
+  # - hybrid: Combines both - vector pre-filters, then LLM reasons on candidates
+  mode: hybrid
+
+  # Vector search settings (used in vector and hybrid modes)
+  vector:
+    enabled: true
+    top_k: 20           # Pre-filter top-k candidates from vector search
+    threshold: 0.3      # Minimum similarity score
+    use_chunk_aggregation: true  # Use PageIndex-style chunk scoring
+    chunk_size: 500     # Chunk size for content splitting
+
+  # LLM reasoning settings (used in reasoning and hybrid modes)
+  reasoning:
+    enabled: true
+    max_candidates: 10  # Max nodes for LLM to process (hybrid mode)
+    max_rounds: 2       # Max search rounds
+
+  # Hybrid fusion settings
+  hybrid:
+    vector_weight: 0.4      # Weight for vector scores in final ranking
+    reasoning_weight: 0.6   # Weight for reasoning scores in final ranking
+
+  # Result settings
+  max_results: 10
+  min_relevance: 0.3
 
 # Web Scraping Configuration
 web:
