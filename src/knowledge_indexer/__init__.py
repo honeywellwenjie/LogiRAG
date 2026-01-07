@@ -37,7 +37,22 @@ def get_reasoning_chain():
     from .retrieval.reasoning import ReasoningChain
     return ReasoningChain
 
-__version__ = "2.0.0"
+def get_hybrid_search_engine():
+    """获取混合检索引擎（向量 + 推理）"""
+    from .retrieval.hybrid_search import HybridSearchEngine
+    return HybridSearchEngine
+
+def get_vector_index():
+    """获取向量索引"""
+    from .retrieval.vector_index import VectorIndex
+    return VectorIndex
+
+def get_embedding_factory():
+    """获取 Embedding 工厂"""
+    from .embedding.factory import EmbeddingFactory
+    return EmbeddingFactory
+
+__version__ = "2.1.0"  # Bump version for hybrid retrieval feature
 
 __all__ = [
     # Markdown 索引
@@ -57,5 +72,9 @@ __all__ = [
     # 检索
     "get_tree_search_engine",
     "get_reasoning_chain",
+    # Hybrid retrieval (new)
+    "get_hybrid_search_engine",
+    "get_vector_index",
+    "get_embedding_factory",
 ]
 

@@ -87,29 +87,44 @@ class LLMConfig:
                 self.api_base = "http://localhost:11434/v1"
 
 
-@dataclass 
+@dataclass
 class IndexerConfig:
     """索引器配置"""
     # RAG LLM (用于 RAG 搜索和索引生成)
     rag_llm: LLMConfig = field(default_factory=LLMConfig)
-    
+
     # Chat LLM (可选，用于聊天回复，如不配置则使用 rag_llm)
     chat_llm: Optional[LLMConfig] = None
-    
+
+    # Embedding configuration (for hybrid retrieval)
+    embedding: 'EmbeddingConfig' = None
+
+    # Retrieval configuration (mode, weights, etc.)
+    retrieval: 'RetrievalConfig' = None
+
     # 向后兼容：llm 属性指向 rag_llm
     @property
     def llm(self) -> LLMConfig:
         return self.rag_llm
-    
+
     # 索引生成配置
     max_tokens_per_node: int = 20000
     max_depth: int = 6
     add_node_id: bool = True
     add_node_summary: bool = True
     add_doc_description: bool = True
-    
+    generate_embeddings: bool = True  # Generate embeddings during indexing
+
     # 语言设置
     language: str = "zh"  # zh, en
+
+    def __post_init__(self):
+        # Initialize embedding config if not set
+        if self.embedding is None:
+            self.embedding = EmbeddingConfig()
+        # Initialize retrieval config if not set
+        if self.retrieval is None:
+            self.retrieval = RetrievalConfig()
     
     @classmethod
     def from_env(cls) -> "IndexerConfig":
@@ -192,14 +207,32 @@ class IndexerConfig:
         
         # 解析索引器配置
         indexer_data = data.get("indexer", {})
-        
+
+        # 解析 Embedding 配置 (for hybrid retrieval)
+        embedding_data = data.get("embedding", {})
+        embedding_config = EmbeddingConfig(
+            provider=embedding_data.get("provider", "sentence_transformer"),
+            model=embedding_data.get("model", "all-MiniLM-L6-v2"),
+            device=embedding_data.get("device", "cpu"),
+            api_key=embedding_data.get("api_key"),
+            api_base=embedding_data.get("api_base"),
+            batch_size=embedding_data.get("batch_size", 32),
+        )
+
+        # 解析 Retrieval 配置
+        retrieval_data = data.get("retrieval", {})
+        retrieval_config = RetrievalConfig.from_dict(retrieval_data) if retrieval_data else RetrievalConfig()
+
         return cls(
             rag_llm=rag_llm_config,
             chat_llm=chat_llm_config,
+            embedding=embedding_config,
+            retrieval=retrieval_config,
             add_node_id=indexer_data.get("add_node_id", True),
             add_node_summary=indexer_data.get("add_node_summary", True),
             add_doc_description=indexer_data.get("add_doc_description", True),
             max_depth=indexer_data.get("max_depth", 6),
+            generate_embeddings=indexer_data.get("generate_embeddings", True),
         )
     
     @classmethod
@@ -234,12 +267,95 @@ class IndexerConfig:
 
 
 @dataclass
+class EmbeddingConfig:
+    """Embedding provider configuration for hybrid retrieval."""
+    provider: str = "sentence_transformer"  # sentence_transformer, openai
+    model: str = "all-MiniLM-L6-v2"  # Model name
+    device: str = "cpu"  # cpu, cuda, mps
+    api_key: Optional[str] = None  # For OpenAI
+    api_base: Optional[str] = None  # For OpenAI-compatible APIs
+    batch_size: int = 32
+
+    def __post_init__(self):
+        # Inherit API key from environment if not set
+        if self.api_key is None and self.provider == "openai":
+            self.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY")
+
+
+@dataclass
+class VectorConfig:
+    """Vector search configuration."""
+    enabled: bool = True
+    top_k: int = 20  # Pre-filter top-k candidates
+    threshold: float = 0.3  # Minimum similarity score
+    use_chunk_aggregation: bool = True  # Use PageIndex-style chunk scoring
+    chunk_size: int = 500  # Chunk size for content splitting
+
+
+@dataclass
+class ReasoningConfig:
+    """LLM reasoning search configuration."""
+    enabled: bool = True
+    max_candidates: int = 10  # Max nodes for LLM to process
+    max_rounds: int = 2  # Max search rounds
+
+
+@dataclass
+class HybridFusionConfig:
+    """Hybrid mode fusion configuration."""
+    vector_weight: float = 0.4  # Weight for vector scores
+    reasoning_weight: float = 0.6  # Weight for reasoning scores
+    early_termination_threshold: float = 0.9  # Stop early if score exceeds this
+
+
+@dataclass
+class RetrievalConfig:
+    """Overall retrieval configuration."""
+    mode: str = "hybrid"  # reasoning, vector, hybrid
+    vector: VectorConfig = field(default_factory=VectorConfig)
+    reasoning: ReasoningConfig = field(default_factory=ReasoningConfig)
+    hybrid: HybridFusionConfig = field(default_factory=HybridFusionConfig)
+    max_results: int = 10
+    min_relevance: float = 0.3
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "RetrievalConfig":
+        """Create from dictionary."""
+        vector_data = data.get("vector", {})
+        reasoning_data = data.get("reasoning", {})
+        hybrid_data = data.get("hybrid", {})
+
+        return cls(
+            mode=data.get("mode", "hybrid"),
+            vector=VectorConfig(
+                enabled=vector_data.get("enabled", True),
+                top_k=vector_data.get("top_k", 20),
+                threshold=vector_data.get("threshold", 0.3),
+                use_chunk_aggregation=vector_data.get("use_chunk_aggregation", True),
+                chunk_size=vector_data.get("chunk_size", 500),
+            ),
+            reasoning=ReasoningConfig(
+                enabled=reasoning_data.get("enabled", True),
+                max_candidates=reasoning_data.get("max_candidates", 10),
+                max_rounds=reasoning_data.get("max_rounds", 2),
+            ),
+            hybrid=HybridFusionConfig(
+                vector_weight=hybrid_data.get("vector_weight", 0.4),
+                reasoning_weight=hybrid_data.get("reasoning_weight", 0.6),
+                early_termination_threshold=hybrid_data.get("early_termination_threshold", 0.9),
+            ),
+            max_results=data.get("max_results", 10),
+            min_relevance=data.get("min_relevance", 0.3),
+        )
+
+
+@dataclass
 class WebConfig:
     """网页抓取配置"""
     timeout: int = 30
     verify_ssl: bool = True
     use_llm_for_conversion: bool = True
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "WebConfig":
         """从字典创建配置"""

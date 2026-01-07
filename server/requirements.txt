@@ -22,5 +22,10 @@ httpx>=0.25.0
 # HTML parsing (for web indexer)
 beautifulsoup4>=4.12.0
 
+# Hybrid retrieval (optional, for vector-based search)
+# Install with: pip install sentence-transformers
+sentence-transformers>=2.2.0
+numpy>=1.24.0
+
 
 
