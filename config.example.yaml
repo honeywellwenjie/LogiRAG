@@ -5,19 +5,10 @@
 # RAG LLM Configuration (for RAG search & indexing)
 # ===========================================
 rag_llm:
-  # Provider: openai, ollama, or any OpenAI-compatible API
   provider: openai
-  
-  # Your API key (required for OpenAI, optional for local models)
   api_key: "your-api-key-here"
-  
-  # API endpoint (change for local models or custom endpoints)
   api_base: "https://api.openai.com/v1"
-  
-  # Model name - used for RAG search reasoning and index generation
   model: "gpt-4o"
-  
-  # Optional parameters
   temperature: 0.1
   max_tokens: 4096
   timeout: 60
