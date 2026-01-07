@@ -42,27 +42,31 @@ def setup_logging():
     """设置完整的日志系统 - 确保包括所有组件的日志"""
     # 清除现有的 handlers（防止重复）
     logging.getLogger().handlers = []
-    
-    # 创建格式化器 - 包含时间、模块、级别、消息
+
+    # 创建格式化器 - 简洁格式，无时间戳
     formatter = logging.Formatter(
-        '%(asctime)s [%(levelname)-8s] %(name)-40s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        '[%(levelname)-8s] %(name)-35s | %(message)s'
     )
-    
+
     # 添加控制台处理器
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.DEBUG)
     console_handler.setFormatter(formatter)
-    
+
     # 配置根 logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(console_handler)
-    
-    # 压制 Flask 和 werkzeug 的过度日志（只显示 WARNING 及以上）
+
+    # 压制第三方库的过度日志
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
     logging.getLogger('flask').setLevel(logging.WARNING)
     logging.getLogger('flask.app').setLevel(logging.WARNING)
+    # 压制 OpenAI SDK 的详细日志
+    logging.getLogger('openai').setLevel(logging.WARNING)
+    logging.getLogger('openai._base_client').setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 # 在 Flask app 创建之前调用
 setup_logging()

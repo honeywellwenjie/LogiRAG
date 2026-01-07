@@ -22,7 +22,7 @@ from .vector_index import VectorIndex, VectorSearchResult
 from ..models.tree_node import DocumentIndex, TreeNode
 from ..debug_utils import (
     debug_print, debug_vector_search, debug_rag_results,
-    debug_rag_search_start, DebugTimer
+    debug_rag_search_start, debug_hybrid_stage, DebugTimer
 )
 
 logger = logging.getLogger(__name__)
@@ -262,12 +262,14 @@ class HybridSearchEngine:
         2. LLM reasoning only processes top candidates (avoiding prompt explosion)
         3. Results are fused with weighted scoring
         """
+        # ============================================================
         # Step 1: Vector pre-filtering
-        debug_print(
-            "📊 步骤1: 向量预过滤",
-            {"top_k": self.config.vector_top_k, "阈值": self.config.vector_threshold},
-            level="search"
-        )
+        # ============================================================
+        debug_hybrid_stage("vector_start", {
+            "top_k": self.config.vector_top_k,
+            "阈值": self.config.vector_threshold,
+            "聚合模式": self.config.use_chunk_aggregation
+        })
 
         logger.info(f"Hybrid search: Vector pre-filtering (top_k={self.config.vector_top_k})")
 
@@ -280,42 +282,53 @@ class HybridSearchEngine:
         )
         vector_duration = time.time() - vector_start
 
-        # DEBUG: 记录向量搜索结果
+        # DEBUG: 详细记录向量搜索结果
         debug_vector_search(query, self.config.vector_top_k, vector_results, vector_duration)
 
         if not vector_results:
             logger.warning("No vector results, falling back to reasoning-only")
-            debug_print("⚠️ 向量搜索无结果，回退到纯推理模式", level="warning")
+            debug_hybrid_stage("vector_done", {
+                "状态": "无结果，回退到纯推理模式",
+                "耗时": f"{vector_duration:.3f}秒"
+            })
             return await self._reasoning_only_search(query, documents, node_maps)
 
+        debug_hybrid_stage("vector_done", {
+            "命中数": len(vector_results),
+            "耗时": f"{vector_duration:.3f}秒",
+            "最高分": f"{vector_results[0].score:.4f}" if vector_results else "-",
+            "最低分": f"{vector_results[-1].score:.4f}" if vector_results else "-"
+        })
+
+        # ============================================================
         # Step 2: Filter documents for LLM reasoning
-        # Only include documents that have candidate nodes from vector search
+        # ============================================================
         candidate_docs = set(r.doc_name for r in vector_results[:self.config.reasoning_max_candidates])
         filtered_documents = {
             name: doc for name, doc in documents.items()
             if name in candidate_docs
         }
 
-        debug_print(
-            "📊 步骤2: 过滤文档用于LLM推理",
-            {
-                "向量结果数": len(vector_results),
-                "候选文档": list(candidate_docs),
-                "过滤后文档数": len(filtered_documents)
-            },
-            level="info"
-        )
+        debug_hybrid_stage("filter_docs", {
+            "原始文档数": len(documents),
+            "向量命中文档": list(candidate_docs),
+            "过滤后文档数": len(filtered_documents),
+            "将送入LLM的节点数": min(len(vector_results), self.config.reasoning_max_candidates)
+        })
 
         logger.info(f"Hybrid search: LLM reasoning on {len(filtered_documents)} documents")
 
+        # ============================================================
         # Step 3: LLM reasoning on filtered documents
-        debug_print(
-            "🧠 步骤3: LLM推理",
-            {"处理文档数": len(filtered_documents), "最大候选数": self.config.reasoning_max_candidates},
-            level="search"
-        )
+        # ============================================================
+        debug_hybrid_stage("reasoning_start", {
+            "处理文档数": len(filtered_documents),
+            "最大候选数": self.config.reasoning_max_candidates
+        })
 
         reasoning_results = []
+        reasoning_duration = 0
+
         if filtered_documents:
             context = SearchContext(
                 query=query,
@@ -343,55 +356,44 @@ class HybridSearchEngine:
                     for r in tree_results
                 ]
 
-                debug_print(
-                    "🧠 LLM推理完成",
-                    {
-                        "耗时": f"{reasoning_duration:.2f}秒",
-                        "结果数": len(reasoning_results),
-                        "结果": [
-                            {"文档": r.doc_name, "节点": r.node_id, "分数": round(r.reasoning_score or 0, 4)}
-                            for r in reasoning_results[:5]
-                        ]
-                    },
-                    level="result"
-                )
+                debug_hybrid_stage("reasoning_done", {
+                    "耗时": f"{reasoning_duration:.2f}秒",
+                    "结果数": len(reasoning_results),
+                    "命中节点": [f"{r.doc_name}:{r.node_id}({r.reasoning_score:.2f})" for r in reasoning_results[:5]]
+                })
 
             except Exception as e:
                 logger.warning(f"Reasoning search failed: {e}, using vector results only")
-                debug_print(f"❌ LLM推理失败: {e}", level="error")
+                debug_hybrid_stage("reasoning_done", {
+                    "状态": "失败",
+                    "错误": str(e)
+                })
 
+        # ============================================================
         # Step 4: Fuse results
-        debug_print(
-            "🔀 步骤4: 结果融合",
-            {
-                "向量结果数": len(vector_results),
-                "推理结果数": len(reasoning_results),
-                "向量权重": self.config.vector_weight,
-                "推理权重": self.config.reasoning_weight
-            },
-            level="info"
-        )
+        # ============================================================
+        debug_hybrid_stage("fusion", {
+            "向量结果数": len(vector_results),
+            "推理结果数": len(reasoning_results),
+            "向量权重": self.config.vector_weight,
+            "推理权重": self.config.reasoning_weight
+        })
 
         merged_results = self._merge_results(vector_results, reasoning_results)
 
-        debug_print(
-            "✅ 融合完成",
-            {
-                "最终结果数": len(merged_results),
-                "结果详情": [
-                    {
-                        "文档": r.doc_name,
-                        "节点": r.node_id,
-                        "最终分数": round(r.final_score, 4),
-                        "向量分数": round(r.vector_score or 0, 4),
-                        "推理分数": round(r.reasoning_score or 0, 4),
-                        "来源": r.source
-                    }
-                    for r in merged_results[:5]
-                ]
-            },
-            level="success"
-        )
+        # 统计来源分布
+        source_counts = {"vector": 0, "reasoning": 0, "both": 0}
+        for r in merged_results:
+            source_counts[r.source] = source_counts.get(r.source, 0) + 1
+
+        debug_hybrid_stage("final", {
+            "最终结果数": len(merged_results),
+            "来源分布": source_counts,
+            "结果列表": [
+                f"{r.doc_name}:{r.node_id} [最终={r.final_score:.3f}, 向量={r.vector_score or 0:.3f}, 推理={r.reasoning_score or 0:.3f}, 来源={r.source}]"
+                for r in merged_results[:5]
+            ]
+        })
 
         return merged_results
 
