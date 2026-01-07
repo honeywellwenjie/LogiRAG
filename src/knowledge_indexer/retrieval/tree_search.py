@@ -11,10 +11,15 @@
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 from ..llm.base import BaseLLM
 from ..models.tree_node import DocumentIndex, TreeNode
+from ..debug_utils import (
+    debug_print, debug_reasoning_round, debug_rag_results,
+    debug_llm_call, debug_llm_response, DebugTimer
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,33 +67,91 @@ class TreeSearchEngine:
     async def search(self, context: SearchContext) -> List[SearchResult]:
         """
         执行多轮树搜索
-        
+
         Args:
             context: 搜索上下文
-            
+
         Returns:
             List[SearchResult]: 排序后的搜索结果
         """
         if not context.documents:
             return []
-        
+
+        # DEBUG: 开始树搜索
+        debug_print(
+            "🌳 树搜索引擎开始",
+            {
+                "查询": context.query,
+                "文档数量": len(context.documents),
+                "最大结果数": context.max_results,
+                "最小相关度": context.min_relevance,
+                "最大推理轮数": self.max_rounds
+            },
+            level="start"
+        )
+
+        search_start = time.time()
+
         # 第一轮：高层扫描
         logger.info(f"Round 1: High-level scan for query: {context.query}")
+        debug_print("🔍 第一轮: 高层扫描", {"目标": "识别相关文档和顶层章节"}, level="search")
+
         high_level_candidates = await self._round1_high_level_scan(context)
-        
+
+        # DEBUG: 第一轮结果
+        debug_print(
+            "📋 第一轮结果",
+            {
+                "候选数量": len(high_level_candidates),
+                "候选列表": high_level_candidates[:5]  # 最多显示5个
+            },
+            level="result"
+        )
+
         if not high_level_candidates:
             logger.warning("No candidates found in round 1")
+            debug_print("⚠️ 第一轮未找到候选节点", level="warning")
             return []
-        
+
         # 第二轮：深入搜索
         logger.info(f"Round 2: Deep search in {len(high_level_candidates)} candidates")
+        debug_print(
+            "🔍 第二轮: 深入搜索",
+            {"候选数量": len(high_level_candidates), "目标": "在候选节点中找到最具体的答案位置"},
+            level="search"
+        )
+
         detailed_results = await self._round2_deep_search(context, high_level_candidates)
-        
+
         # 排序和过滤
         results = sorted(detailed_results, key=lambda x: x.relevance_score, reverse=True)
         results = [r for r in results if r.relevance_score >= context.min_relevance]
-        
-        return results[:context.max_results]
+        final_results = results[:context.max_results]
+
+        # DEBUG: 最终结果
+        search_duration = time.time() - search_start
+        debug_print(
+            "🏁 树搜索完成",
+            {
+                "总耗时": f"{search_duration:.2f}秒",
+                "原始结果数": len(detailed_results),
+                "过滤后结果数": len(results),
+                "返回结果数": len(final_results),
+                "最终结果": [
+                    {
+                        "文档": r.doc_name,
+                        "节点": r.node_id,
+                        "标题": r.title,
+                        "分数": round(r.relevance_score, 4),
+                        "理由": r.reasoning[:100] if r.reasoning else ""
+                    }
+                    for r in final_results
+                ]
+            },
+            level="end"
+        )
+
+        return final_results
     
     def search_sync(self, context: SearchContext) -> List[SearchResult]:
         """同步版本的搜索"""
@@ -112,12 +175,12 @@ class TreeSearchEngine:
     async def _round1_high_level_scan(self, context: SearchContext) -> List[Dict]:
         """
         第一轮：高层扫描
-        
+
         只看文档描述和顶层章节标题+摘要，选择可能相关的区域
         """
         # 构建高层结构视图
         high_level_view = self._build_high_level_view(context.documents)
-        
+
         prompt = f"""You are an expert document retrieval system. Given a question and document structures, identify the most relevant sections.
 
 ## Question
@@ -142,7 +205,7 @@ Return a JSON object:
     "candidates": [
         {{
             "doc_name": "document_name",
-            "node_id": "section_id", 
+            "node_id": "section_id",
             "relevance": 0.9,
             "reason": "This section likely contains..."
         }}
@@ -153,43 +216,77 @@ Return a JSON object:
 Select up to 5 most relevant sections. Be selective - only include sections with relevance >= 0.5.
 Return ONLY the JSON, no other text."""
 
+        # DEBUG: 记录第一轮推理请求
+        debug_reasoning_round(
+            round_num=1,
+            candidates_count=sum(len(doc.get('sections', [])) for doc in high_level_view.get('documents', [])),
+            prompt=prompt,
+            response="(等待 LLM 响应...)"
+        )
+
         try:
+            start_time = time.time()
             response = self.llm.complete(prompt, temperature=0.1)
+            duration = time.time() - start_time
+
+            # DEBUG: 记录第一轮推理响应
+            debug_reasoning_round(
+                round_num=1,
+                candidates_count=sum(len(doc.get('sections', [])) for doc in high_level_view.get('documents', [])),
+                prompt=f"(已记录，耗时 {duration:.2f}秒)",
+                response=response.content
+            )
+
             result = self._parse_json_response(response.content)
             return result.get('candidates', [])
         except Exception as e:
             logger.error(f"Round 1 search failed: {e}")
+            debug_print(f"❌ 第一轮推理失败: {e}", level="error")
             # Fallback: 返回所有顶层节点
             return self._fallback_candidates(context.documents)
     
     async def _round2_deep_search(
-        self, 
-        context: SearchContext, 
+        self,
+        context: SearchContext,
         candidates: List[Dict]
     ) -> List[SearchResult]:
         """
         第二轮：深入搜索
-        
+
         对每个候选区域进行详细搜索，找到最相关的具体节点
         """
         results = []
-        
-        for candidate in candidates:
+
+        for idx, candidate in enumerate(candidates):
             doc_name = candidate.get('doc_name')
             node_id = candidate.get('node_id')
             base_relevance = candidate.get('relevance', 0.5)
-            
+
+            # DEBUG: 处理每个候选
+            debug_print(
+                f"🔎 第二轮: 处理候选 {idx + 1}/{len(candidates)}",
+                {"文档": doc_name, "节点": node_id, "基础相关度": base_relevance},
+                level="search"
+            )
+
             if doc_name not in context.node_maps:
+                debug_print(f"⚠️ 文档不存在: {doc_name}", level="warning")
                 continue
-            
+
             node_map = context.node_maps[doc_name]
             if node_id not in node_map:
+                debug_print(f"⚠️ 节点不存在: {node_id}", level="warning")
                 continue
-            
+
             node = node_map[node_id]
-            
+
             # 如果节点没有子节点，直接返回
             if not node.children:
+                debug_print(
+                    f"📌 叶子节点，直接使用",
+                    {"标题": node.title, "相关度": base_relevance},
+                    level="info"
+                )
                 results.append(SearchResult(
                     doc_name=doc_name,
                     node_id=node_id,
@@ -199,10 +296,10 @@ Return ONLY the JSON, no other text."""
                     path=[node.title]
                 ))
                 continue
-            
+
             # 有子节点，深入搜索
             subtree_view = self._build_subtree_view(node, doc_name)
-            
+
             prompt = f"""You are searching within a document section to find the most specific answer location.
 
 ## Question
@@ -216,7 +313,7 @@ Summary: {node.summary or 'No summary'}
 {json.dumps(subtree_view, indent=2, ensure_ascii=False)}
 
 ## Task
-Find the most specific subsection(s) that contain the answer. 
+Find the most specific subsection(s) that contain the answer.
 - If the answer is in a specific subsection, select that subsection
 - If the answer spans multiple subsections or is in the parent section itself, select the parent
 - Consider both title and summary when making decisions
@@ -236,14 +333,38 @@ Find the most specific subsection(s) that contain the answer.
 
 Return ONLY the JSON."""
 
+            # DEBUG: 记录第二轮推理
+            debug_reasoning_round(
+                round_num=2,
+                candidates_count=len(node.children),
+                prompt=prompt,
+                response="(等待 LLM 响应...)"
+            )
+
             try:
+                start_time = time.time()
                 response = self.llm.complete(prompt, temperature=0.1)
+                duration = time.time() - start_time
+
+                # DEBUG: 记录响应
+                debug_reasoning_round(
+                    round_num=2,
+                    candidates_count=len(node.children),
+                    prompt=f"(已记录，耗时 {duration:.2f}秒)",
+                    response=response.content
+                )
+
                 sub_result = self._parse_json_response(response.content)
-                
+
                 for selected in sub_result.get('selected_nodes', []):
                     sel_node_id = selected.get('node_id')
                     if sel_node_id in node_map:
                         sel_node = node_map[sel_node_id]
+                        debug_print(
+                            f"✅ 选中子节点",
+                            {"节点": sel_node_id, "标题": sel_node.title, "相关度": selected.get('relevance')},
+                            level="success"
+                        )
                         results.append(SearchResult(
                             doc_name=doc_name,
                             node_id=sel_node_id,
@@ -254,6 +375,11 @@ Return ONLY the JSON."""
                         ))
                     else:
                         # 如果返回的 node_id 无效，使用父节点
+                        debug_print(
+                            f"⚠️ 返回的节点ID无效，使用父节点",
+                            {"无效ID": sel_node_id, "使用": node_id},
+                            level="warning"
+                        )
                         results.append(SearchResult(
                             doc_name=doc_name,
                             node_id=node_id,
@@ -262,9 +388,10 @@ Return ONLY the JSON."""
                             reasoning=candidate.get('reason', ''),
                             path=[node.title]
                         ))
-                        
+
             except Exception as e:
                 logger.warning(f"Round 2 deep search failed for {node_id}: {e}")
+                debug_print(f"❌ 第二轮深入搜索失败: {e}", {"节点": node_id}, level="error")
                 # Fallback: 使用候选节点本身
                 results.append(SearchResult(
                     doc_name=doc_name,
@@ -274,7 +401,7 @@ Return ONLY the JSON."""
                     reasoning=candidate.get('reason', ''),
                     path=[node.title]
                 ))
-        
+
         return results
     
     def _build_high_level_view(self, documents: Dict[str, DocumentIndex]) -> Dict:

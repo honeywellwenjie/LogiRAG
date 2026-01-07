@@ -5,8 +5,10 @@ OpenAI 兼容的 LLM 实现
 
 from typing import List, Optional
 import logging
+import time
 
 from .base import BaseLLM, LLMResponse, Message
+from ..debug_utils import debug_llm_call, debug_llm_response, DEBUG_SEPARATOR
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +64,32 @@ class OpenAICompatibleLLM(BaseLLM):
         """发送聊天请求"""
         if not self._available or self.client is None:
             raise RuntimeError("OpenAI client unavailable")
-        
+
         # 转换消息格式
         formatted_messages = [msg.to_dict() for msg in messages]
-        
+
         # 使用传入的参数或默认值
         temp = temperature if temperature is not None else self.temperature
         tokens = max_tokens if max_tokens is not None else self.max_tokens
-        
+
+        # DEBUG: 记录 LLM 调用请求
+        system_prompt = None
+        user_prompt = None
+        for msg in formatted_messages:
+            if msg.get('role') == 'system':
+                system_prompt = msg.get('content', '')
+            elif msg.get('role') == 'user':
+                user_prompt = msg.get('content', '')
+
+        debug_llm_call(
+            purpose="LLM Chat",
+            prompt=user_prompt or str(formatted_messages),
+            system_prompt=system_prompt,
+            model=self.model
+        )
+
+        start_time = time.time()
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -78,19 +98,38 @@ class OpenAICompatibleLLM(BaseLLM):
                 max_tokens=tokens,
                 **kwargs
             )
-            
+
+            duration = time.time() - start_time
+            content = response.choices[0].message.content
+            usage = {
+                "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
+                "completion_tokens": response.usage.completion_tokens if response.usage else 0,
+                "total_tokens": response.usage.total_tokens if response.usage else 0,
+            }
+
+            # DEBUG: 记录 LLM 调用响应
+            debug_llm_response(
+                purpose="LLM Chat",
+                response=content,
+                usage=usage,
+                duration=duration
+            )
+
             return LLMResponse(
-                content=response.choices[0].message.content,
+                content=content,
                 model=response.model,
-                usage={
-                    "prompt_tokens": response.usage.prompt_tokens if response.usage else 0,
-                    "completion_tokens": response.usage.completion_tokens if response.usage else 0,
-                    "total_tokens": response.usage.total_tokens if response.usage else 0,
-                },
+                usage=usage,
                 raw_response=response
             )
         except Exception as e:
+            duration = time.time() - start_time
             logger.error(f"LLM request failed: {e}")
+            # DEBUG: 记录错误
+            debug_llm_response(
+                purpose="LLM Chat (失败)",
+                response=f"错误: {str(e)}",
+                duration=duration
+            )
             raise
     
     def is_available(self) -> bool:
