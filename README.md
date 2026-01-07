@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🧠 LogiRAG
+# LogiRAG
 
 **Reasoning-based RAG with Tree Indexing**
 
@@ -80,7 +80,7 @@ LogiRAG uses **reasoning-based retrieval**:
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/LogiRAG.git
+git clone https://github.com/honeywellwenjie/LogiRAG.git
 cd LogiRAG
 ```
 
