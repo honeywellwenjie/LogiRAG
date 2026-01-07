@@ -34,7 +34,7 @@ USER raguser
 EXPOSE 3003
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:3003/health')"
 
 # Start RAG server
