@@ -1989,27 +1989,86 @@ def chat():
         user_message = data['message']
         logger.info(f"Chat message: {user_message}")
 
-        # 1. Use RAG to retrieve relevant context
+        # 1. Use Hybrid RAG to retrieve relevant context
+        rag_start = time.time()
+        search_result = {'node_list': [], 'thinking': '', 'mode': 'unknown'}
 
         try:
-            import nest_asyncio
-            try:
-                nest_asyncio.apply()
-            except:
-                pass
+            # 获取配置的检索模式
+            config = IndexerConfig.from_file()
+            retrieval_mode_str = config.retrieval.mode if hasattr(config, 'retrieval') else 'hybrid'
 
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                rag_start = time.time()
-                search_result = loop.run_until_complete(enhanced_tree_search(user_message))
-                rag_duration = time.time() - rag_start
-                logger.info(f"RAG search completed in {rag_duration:.2f}s with {len(search_result.get('node_list', []))} nodes")
-            finally:
-                loop.close()
+            # 使用 hybrid_engine 进行搜索
+            hybrid_eng = get_hybrid_engine()
+            if hybrid_eng:
+                # 确定检索模式
+                mode_map = {
+                    'reasoning': RetrievalMode.REASONING,
+                    'vector': RetrievalMode.VECTOR,
+                    'hybrid': RetrievalMode.HYBRID,
+                }
+                retrieval_mode = mode_map.get(retrieval_mode_str, RetrievalMode.HYBRID)
+
+                logger.info(f"Chat using retrieval mode: {retrieval_mode.value}")
+
+                # 执行混合搜索
+                results = hybrid_eng.search_sync(
+                    query=user_message,
+                    documents=document_indexes,
+                    node_maps=node_maps,
+                    mode=retrieval_mode
+                )
+
+                # 转换结果格式
+                node_list = [
+                    {
+                        'doc_name': r.doc_name,
+                        'node_id': r.node_id,
+                        'relevance': r.final_score,
+                        'vector_score': r.vector_score,
+                        'reasoning_score': r.reasoning_score,
+                        'source': r.source
+                    }
+                    for r in results
+                ]
+
+                # 构建 thinking 信息
+                thinking_parts = [f"检索模式: {retrieval_mode.value}"]
+                source_counts = {}
+                for r in results:
+                    source_counts[r.source] = source_counts.get(r.source, 0) + 1
+                if source_counts:
+                    thinking_parts.append(f"来源分布: {source_counts}")
+                thinking_parts.append(f"命中节点: {len(results)}")
+
+                search_result = {
+                    'node_list': node_list,
+                    'thinking': ' | '.join(thinking_parts),
+                    'mode': retrieval_mode.value
+                }
+            else:
+                # Fallback to enhanced_tree_search if hybrid engine not available
+                logger.warning("Hybrid engine not available, falling back to enhanced_tree_search")
+                import nest_asyncio
+                try:
+                    nest_asyncio.apply()
+                except:
+                    pass
+
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    search_result = loop.run_until_complete(enhanced_tree_search(user_message))
+                    search_result['mode'] = 'reasoning'
+                finally:
+                    loop.close()
+
         except Exception as e:
-            logger.error(f"RAG search failed: {e}")
-            search_result = {'node_list': [], 'thinking': str(e)}
+            logger.error(f"RAG search failed: {e}", exc_info=True)
+            search_result = {'node_list': [], 'thinking': str(e), 'mode': 'error'}
+
+        rag_duration = time.time() - rag_start
+        logger.info(f"RAG search completed in {rag_duration:.2f}s with {len(search_result.get('node_list', []))} nodes (mode={search_result.get('mode', 'unknown')})")
 
         # 2. Extract context
         node_list = search_result.get('node_list', [])
@@ -2106,6 +2165,17 @@ Knowledge Base Content:
         
         logger.info(f"Chat response generated in {time.time() - chat_start:.2f}s")
 
+        # 构建详细的节点评分信息
+        relevance_scores = {}
+        for item in search_result.get('node_list', []):
+            key = f"{item.get('doc_name', '')}:{item.get('node_id', '')}"
+            relevance_scores[key] = {
+                'final': round(item.get('relevance', 0), 4),
+                'vector': round(item.get('vector_score', 0) or 0, 4),
+                'reasoning': round(item.get('reasoning_score', 0) or 0, 4),
+                'source': item.get('source', 'unknown')
+            }
+
         return jsonify({
             'reply': reply,
             'debug': {
@@ -2113,6 +2183,8 @@ Knowledge Base Content:
                 'nodes': [f"{ctx['doc_name']}:{ctx['node_id']}" for ctx in contexts],
                 'source_files': list(set(ctx['doc_name'] for ctx in contexts)),
                 'thinking': search_result.get('thinking', ''),
+                'retrieval_mode': search_result.get('mode', 'unknown'),
+                'relevance_scores': relevance_scores,
                 'context_size': len(combined_context),
                 'kb_size': {
                     'chars': kb_stats['total_chars'],
