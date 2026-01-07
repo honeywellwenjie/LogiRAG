@@ -1,0 +1,173 @@
+# LogiRAG Configuration - Hybrid Mode (Recommended)
+# ==================================================
+# This mode combines vector search with LLM reasoning.
+# Vector search pre-filters candidates, then LLM reasons on the filtered set.
+# Best for: Most use cases - balanced speed, accuracy, and cost.
+#
+# How it works:
+#   1. Vector search finds top-k similar nodes (fast, ~50ms)
+#   2. LLM reasons on the filtered candidates (accurate)
+#   3. Scores are fused with configurable weights
+#
+# Pros:
+#   - Good balance of speed and accuracy
+#   - Avoids token explosion with large knowledge bases
+#   - More scalable than pure reasoning
+#
+# Cons:
+#   - Requires both LLM and embedding model
+#   - Slightly slower than pure vector mode
+#
+# Usage:
+#   cp config.example.hybrid.yaml config.yaml
+#   # Edit your API keys below
+#   pip install sentence-transformers
+
+# ===========================================
+# RAG LLM Configuration (for search & indexing)
+# ===========================================
+rag_llm:
+  provider: openai
+  api_key: "your-openai-api-key"
+  api_base: "https://api.openai.com/v1"
+  model: "gpt-4o"
+  temperature: 0.1          # Low temperature for consistent reasoning
+  max_tokens: 4096
+  timeout: 60
+
+# ===========================================
+# Chat LLM Configuration (for responses)
+# ===========================================
+chat_llm:
+  provider: openai
+  api_key: "your-openai-api-key"
+  api_base: "https://api.openai.com/v1"
+  model: "gpt-4o"
+  temperature: 0.7          # Higher temperature for natural responses
+  max_tokens: 4096
+  timeout: 60
+
+# ===========================================
+# Indexer Configuration
+# ===========================================
+indexer:
+  add_node_id: true
+  add_node_summary: true
+  add_doc_description: true
+  max_depth: 6
+  generate_embeddings: true   # REQUIRED for hybrid mode
+
+# ===========================================
+# Embedding Configuration
+# ===========================================
+embedding:
+  # Local embedding with sentence-transformers (recommended)
+  provider: sentence_transformer
+
+  # Model options:
+  # - all-MiniLM-L6-v2: Fast, 384 dims (recommended for start)
+  # - all-mpnet-base-v2: Better quality, 768 dims
+  # - paraphrase-multilingual-MiniLM-L12-v2: Multilingual support
+  model: "all-MiniLM-L6-v2"
+
+  # Device: cpu, cuda (NVIDIA), mps (Apple Silicon)
+  device: "cpu"
+
+  # Batch size for embedding generation
+  batch_size: 32
+
+# ===========================================
+# Retrieval Configuration - Hybrid Mode
+# ===========================================
+retrieval:
+  mode: hybrid              # Hybrid: vector + reasoning
+
+  # Vector search settings (pre-filtering)
+  vector:
+    enabled: true
+    top_k: 20               # Pre-filter top 20 candidates
+    threshold: 0.3          # Minimum similarity score
+    use_chunk_aggregation: true
+    chunk_size: 500
+
+  # LLM reasoning settings (on filtered candidates)
+  reasoning:
+    enabled: true
+    max_candidates: 10      # Max nodes for LLM to process
+    max_rounds: 2           # Max reasoning rounds
+
+  # Hybrid fusion settings
+  hybrid:
+    vector_weight: 0.4      # Weight for vector similarity score
+    reasoning_weight: 0.6   # Weight for LLM reasoning score
+    # Note: weights should sum to ~1.0
+
+  # Result settings
+  max_results: 10
+  min_relevance: 0.3
+
+# ===========================================
+# Web Scraping Configuration
+# ===========================================
+web:
+  timeout: 30
+  verify_ssl: true
+  use_llm_for_conversion: true
+
+# ===========================================
+# Alternative Configurations
+# ===========================================
+
+# --- Local LLM with Ollama ---
+# rag_llm:
+#   provider: ollama
+#   api_key: "not-needed"
+#   api_base: "http://localhost:11434/v1"
+#   model: "deepseek-r1:8b"
+#   temperature: 0.1
+#   timeout: 300
+#
+# chat_llm:
+#   provider: ollama
+#   api_key: "not-needed"
+#   api_base: "http://localhost:11434/v1"
+#   model: "deepseek-r1:8b"
+#   temperature: 0.7
+#   timeout: 300
+
+# --- DeepSeek API (Cost-effective) ---
+# rag_llm:
+#   provider: openai
+#   api_key: "your-deepseek-key"
+#   api_base: "https://api.deepseek.com/v1"
+#   model: "deepseek-chat"
+#   temperature: 0.1
+
+# --- OpenAI Embeddings ---
+# embedding:
+#   provider: openai
+#   api_key: "your-openai-api-key"
+#   model: "text-embedding-3-small"
+
+# --- Speed-optimized Hybrid ---
+# retrieval:
+#   mode: hybrid
+#   vector:
+#     top_k: 10             # Fewer candidates = faster
+#     threshold: 0.5        # Higher threshold = fewer results
+#   hybrid:
+#     vector_weight: 0.6    # Trust vector more = faster
+#     reasoning_weight: 0.4
+
+# --- Accuracy-optimized Hybrid ---
+# retrieval:
+#   mode: hybrid
+#   vector:
+#     top_k: 30             # More candidates for LLM to consider
+#     threshold: 0.2        # Lower threshold = more coverage
+#   reasoning:
+#     max_candidates: 15    # More nodes for reasoning
+#     max_rounds: 3         # More reasoning rounds
+#   hybrid:
+#     vector_weight: 0.3    # Trust reasoning more
+#     reasoning_weight: 0.7

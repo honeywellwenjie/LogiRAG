@@ -1,0 +1,127 @@
+# LogiRAG Configuration - Pure Vector Mode (Embedding Only)
+# ==========================================================
+# This mode uses only embedding-based similarity search.
+# Best for: Large knowledge bases where speed is the priority.
+#
+# Pros:
+#   - Very fast retrieval (milliseconds)
+#   - No LLM token cost for retrieval
+#   - Scales well to large document collections
+#
+# Cons:
+#   - Lower accuracy than reasoning mode
+#   - May miss semantic nuances
+#   - Requires embedding model
+#
+# Usage:
+#   cp config.example.vector.yaml config.yaml
+#   # Edit your API keys below
+#   pip install sentence-transformers
+
+# ===========================================
+# RAG LLM Configuration (for indexing only)
+# ===========================================
+# Note: In vector mode, LLM is only used for generating
+# summaries during indexing, not for retrieval.
+rag_llm:
+  provider: openai
+  api_key: "your-openai-api-key"
+  api_base: "https://api.openai.com/v1"
+  model: "gpt-3.5-turbo"    # Cheaper model is fine for summaries
+  temperature: 0.1
+  max_tokens: 4096
+  timeout: 60
+
+# ===========================================
+# Chat LLM Configuration (for responses)
+# ===========================================
+chat_llm:
+  provider: openai
+  api_key: "your-openai-api-key"
+  api_base: "https://api.openai.com/v1"
+  model: "gpt-4o"           # Use better model for chat responses
+  temperature: 0.7
+  max_tokens: 4096
+  timeout: 60
+
+# ===========================================
+# Indexer Configuration
+# ===========================================
+indexer:
+  add_node_id: true
+  add_node_summary: true
+  add_doc_description: true
+  max_depth: 6
+  generate_embeddings: true   # REQUIRED for vector mode
+
+# ===========================================
+# Embedding Configuration
+# ===========================================
+embedding:
+  # Local embedding with sentence-transformers (recommended)
+  provider: sentence_transformer
+
+  # Model options:
+  # - all-MiniLM-L6-v2: Fast, 384 dims (recommended for start)
+  # - all-mpnet-base-v2: Better quality, 768 dims
+  # - paraphrase-multilingual-MiniLM-L12-v2: Multilingual support
+  model: "all-MiniLM-L6-v2"
+
+  # Device: cpu, cuda (NVIDIA), mps (Apple Silicon)
+  device: "cpu"
+
+  # Batch size for embedding generation
+  batch_size: 32
+
+# ===========================================
+# Retrieval Configuration - Vector Mode
+# ===========================================
+retrieval:
+  mode: vector              # Pure vector search
+
+  # Vector search settings
+  vector:
+    enabled: true
+    top_k: 20               # Return top 20 most similar nodes
+    threshold: 0.3          # Minimum similarity score (0-1)
+    use_chunk_aggregation: true
+    chunk_size: 500
+
+  # Reasoning disabled
+  reasoning:
+    enabled: false
+
+  # Result settings
+  max_results: 10
+  min_relevance: 0.3
+
+# ===========================================
+# Web Scraping Configuration
+# ===========================================
+web:
+  timeout: 30
+  verify_ssl: true
+  use_llm_for_conversion: true
+
+# ===========================================
+# Alternative Embedding Configurations
+# ===========================================
+
+# --- OpenAI Embeddings ---
+# embedding:
+#   provider: openai
+#   api_key: "your-openai-api-key"  # Or inherits from rag_llm.api_key
+#   model: "text-embedding-3-small" # 1536 dims, cheaper
+#   # model: "text-embedding-3-large" # 3072 dims, better quality
+
+# --- Better Quality Local Model ---
+# embedding:
+#   provider: sentence_transformer
+#   model: "all-mpnet-base-v2"      # 768 dims, better quality
+#   device: "cuda"                  # Use GPU if available
+
+# --- Multilingual Support ---
+# embedding:
+#   provider: sentence_transformer
+#   model: "paraphrase-multilingual-MiniLM-L12-v2"
+#   device: "cpu"

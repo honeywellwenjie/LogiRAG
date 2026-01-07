@@ -230,18 +230,59 @@ LogiRAG/
 
 ## 🔧 Configuration
 
+### Retrieval Modes
+
+LogiRAG supports **three retrieval modes** to balance speed, accuracy, and cost:
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `reasoning` | LLM navigates the tree structure to find relevant content | Small knowledge bases, highest accuracy |
+| `vector` | Fast embedding-based similarity search | Large knowledge bases, speed priority |
+| `hybrid` | Vector pre-filters candidates, then LLM reasons on filtered set | **Recommended** - balanced approach |
+
+#### Mode Comparison
+
+| Aspect | Reasoning | Vector | Hybrid |
+|--------|-----------|--------|--------|
+| Speed | ⚡ Slow | ⚡⚡⚡ Fast | ⚡⚡ Medium |
+| Accuracy | ⭐⭐⭐⭐⭐ Best | ⭐⭐ Good | ⭐⭐⭐⭐ Very Good |
+| Token Cost | High | None | Medium |
+| Scalability | Limited | Excellent | Good |
+
+### Quick Configuration Examples
+
+We provide three example configurations for different modes:
+
+| File | Mode | Use Case |
+|------|------|----------|
+| `config.example.reasoning.yaml` | Pure LLM | Small docs, max accuracy |
+| `config.example.vector.yaml` | Pure Embedding | Large docs, fast search |
+| `config.example.hybrid.yaml` | Hybrid | **Recommended** for most cases |
+
+```bash
+# Copy the example that fits your needs
+cp config.example.hybrid.yaml config.yaml
+# Edit with your API keys
+```
+
 ### Full Configuration Options
 
 ```yaml
-# LLM Configuration
-llm:
+# RAG LLM Configuration (for search & indexing)
+rag_llm:
   provider: openai          # openai, ollama
   api_key: "your-key"       # API key
   api_base: "https://..."   # API endpoint
   model: "gpt-4o"           # Model name
-  temperature: 0.1          # Response randomness
+  temperature: 0.1          # Response randomness (low for accuracy)
   max_tokens: 4096          # Max response tokens
   timeout: 60               # Request timeout (seconds)
+
+# Chat LLM Configuration (optional, for responses)
+chat_llm:
+  provider: openai
+  model: "gpt-4o"
+  temperature: 0.7          # Higher for natural responses
 
 # Indexer Configuration
 indexer:
@@ -249,12 +290,63 @@ indexer:
   add_node_summary: true    # Generate node summaries
   add_doc_description: true # Generate document descriptions
   max_depth: 6              # Maximum tree depth
+  generate_embeddings: true # Required for vector/hybrid modes
+
+# Embedding Configuration (for vector/hybrid modes)
+embedding:
+  provider: sentence_transformer  # sentence_transformer or openai
+  model: "all-MiniLM-L6-v2"       # HuggingFace model name
+  device: "cpu"                   # cpu, cuda, or mps
+
+# Retrieval Configuration
+retrieval:
+  mode: hybrid              # reasoning, vector, or hybrid
+  vector:
+    enabled: true
+    top_k: 20               # Candidates from vector search
+    threshold: 0.3          # Minimum similarity score
+  reasoning:
+    enabled: true
+    max_candidates: 10      # Max nodes for LLM reasoning
+    max_rounds: 2           # Max search rounds
+  hybrid:
+    vector_weight: 0.4      # Vector score weight
+    reasoning_weight: 0.6   # Reasoning score weight
+  max_results: 10           # Final result count
+  min_relevance: 0.3        # Minimum relevance threshold
 
 # Web Scraping Configuration
 web:
   timeout: 30               # Request timeout
   verify_ssl: true          # Verify SSL certificates
   use_llm_for_conversion: true  # Use LLM for HTML→Markdown
+```
+
+### Required Models
+
+#### Embedding Models (Local, Auto-downloaded)
+
+| Model | Dimensions | Speed | Quality |
+|-------|------------|-------|---------|
+| `all-MiniLM-L6-v2` | 384 | ⚡⚡⚡ Fast | ⭐⭐⭐ Good |
+| `all-mpnet-base-v2` | 768 | ⚡⚡ Medium | ⭐⭐⭐⭐ Better |
+| `paraphrase-multilingual-MiniLM-L12-v2` | 384 | ⚡⚡⚡ Fast | ⭐⭐⭐ Good (Multilingual) |
+
+#### LLM Options
+
+- **OpenAI**: `gpt-4o`, `gpt-4-turbo`, `gpt-3.5-turbo`
+- **Ollama (Local)**: `deepseek-r1:8b`, `llama3`, `mistral`
+- **DeepSeek API**: `deepseek-chat`
+
+### Installation for Hybrid Mode
+
+```bash
+# Install embedding library
+pip install sentence-transformers
+
+# (Optional) For local LLM with Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull deepseek-r1:8b
 ```
 
 ---
